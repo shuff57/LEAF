@@ -1,0 +1,12 @@
+# AMD GPU image (Radeon 890M and other ROCm-supported GPUs).
+# UNTESTED: written from ROCm/PyTorch conventions. If `torch.cuda.is_available()` is False
+# inside the container, see README "Troubleshooting".
+FROM rocm/pytorch:latest
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 MODELS_DIR=/models HF_HOME=/models/hf
+WORKDIR /srv
+COPY requirements.txt .
+# The base image already ships a ROCm build of torch/torchvision; don't replace it.
+RUN pip install -r requirements.txt
+COPY app ./app
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
