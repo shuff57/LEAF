@@ -43,9 +43,11 @@ These are the "pre-trained models" and "metadata files" shares linked from the [
 
 For other file names set `PLANTNET_WEIGHTS`, `PLANTNET_SPECIES_JSON` and `PLANTNET_CLASS_IDX_JSON`. For another ResNet depth from the same share set `PLANTNET_ARCH` (for example `resnet50`).
 
-If loading fails with a message about "safe mode", the official checkpoint contains non-tensor objects. If you trust the file, set `PLANTNET_ALLOW_PICKLE=1`.
+The official checkpoint loads in PyTorch's safe mode (`weights_only=True`), so it does not need `PLANTNET_ALLOW_PICKLE`. If another checkpoint fails with a message about "safe mode", it contains non-tensor objects; only if you trust the file, set `PLANTNET_ALLOW_PICKLE=1`.
 
-Without `class_idx_to_species_id.json` the service assumes class order equals species ids sorted **as strings** (torchvision's ImageFolder convention). Sorting numerically would mislabel every class.
+Without `class_idx_to_species_id.json` the service assumes class order equals species ids sorted **as strings** (torchvision's ImageFolder convention, which the official file matches exactly). Sorting numerically would mislabel every class.
+
+The 1,081 species were picked for the dataset, not for being common: dandelion, daisy, ivy and sunflower are not among them, so this model can never return them. Use BioCLIP with your own label list for those.
 
 ### BioCLIP
 
