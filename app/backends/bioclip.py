@@ -114,4 +114,4 @@ class BioClip(Backend):
 class BioClip2(BioClip):
     id = "bioclip2"
     hub_id = "hf-hub:imageomics/bioclip-2"
-    description = "The previous BioCLIP, same species list: half the memory, 2-4x faster on CPU."
+    description = "The previous BioCLIP, same species list: half the memory, 2 to 4 times faster on CPU."

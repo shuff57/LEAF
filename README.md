@@ -111,7 +111,7 @@ Sixteen photos from Wikipedia and Wikimedia Commons: ten species that are in Pla
 | `inat21` | 4,271 | 8 | 5 | 1.8 s | 2.7 GiB |
 | `inat21-convnext` | 4,271 | 8 | 5 | 1.2 s | 2.0 GiB |
 
-Time per photo is the warm median of 20 runs; RAM is the peak of a process with that one model loaded. The iNat21 models' two PlantNet "misses" are the ZZ plant, which they don't list, and *Anemone nemorosa*, which they name correctly by its newer name *Anemonoides nemorosa*. Both put dandelion second, behind *Taraxacum erythrospermum*. A PlantCLEF 2024 classifier (DINOv2 ViT-B/14, 7,806 European species, `vincent-espitalier/dino-v2-reg4-with-plantclef2024-weights`) was tested too and left out: 5 of 16 top-1.
+Time per photo is the warm median of 20 runs; RAM is the peak of a process with that one model loaded. With all five loaded, as after a compare run, the server held 7.9 GiB and peaked at 9.9 GiB while loading them. The iNat21 models' two PlantNet "misses" are the ZZ plant, which they don't list, and *Anemone nemorosa*, which they name correctly by its newer name *Anemonoides nemorosa*. Both put dandelion second, behind *Taraxacum erythrospermum*. A PlantCLEF 2024 classifier (DINOv2 ViT-B/14, 7,806 European species, `vincent-espitalier/dino-v2-reg4-with-plantclef2024-weights`) was tested too and left out: 5 of 16 top-1.
 
 ## Run
 
@@ -196,15 +196,19 @@ app/main.py              API routes and static UI
 app/backends/            one file per model; registry loads them lazily
 app/labels.py            label mapping and checkpoint parsing (pure Python)
 app/static/index.html    the test page, no external requests
-tests/                   pytest suite (runs with the mock backend, no PyTorch needed)
+tests/                   pytest suite; the backend tests skip without PyTorch
 ```
 
 To add a model, subclass `Backend` in `app/backends/`, implement `is_available`, `load` and `_predict`, and add it to `_CLASSES` in `app/backends/__init__.py`.
 
 ## What has and hasn't been tested
 
-Tested: the API (upload handling, error cases, model registry, clamping, cold-start reporting), label and checkpoint parsing, a live server smoke test, and the web page's interaction flow in a simulated DOM. Run the suite with `pip install -r requirements-dev.txt && pytest`.
+Tested on a Ryzen AI 9 HX 370 laptop, CPU only:
 
-**Not tested:** the PlantNet-300K and BioCLIP backends against real weights, the ROCm image, and the page in a real browser. My environment had no PyTorch, model downloads or GPU. Expect to fix small things on first run (most likely weight filenames or the ROCm base image tag); the error messages are written to point at the cause.
+- Every model against its real weights (the comparison above), and the BioCLIP label cache across restarts.
+- The page in Chromium, driven with Playwright: one model and compare mode with all five models, light and dark mode at 1280 and 390 pixels wide, and a 1.7 MB phone photo, which the page shrank to 0.3 MB before upload and kept upright. No console errors, and no requests to anything but the server itself.
+- `pytest`: the API, label and checkpoint parsing, and the PlantNet-300K and iNat21 load and predict code on small random-weight models (skipped without PyTorch). Run it with `pip install -r requirements-dev.txt && pytest`.
+
+**Not tested yet:** the ROCm image on the GPU, the "Take photo" button (it only shows on touch screens), and drag-and-drop or paste.
 
 Identification from a photo is a lead, not a verdict. Don't eat or handle a plant based on this alone.
