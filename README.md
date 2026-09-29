@@ -6,7 +6,7 @@ A small self-hosted plant identification service: a FastAPI backend with swappab
 |---|---|---|
 | `plantnet300k` | ResNet trained on Pl@ntNet-300K (1,081 species) | Fast, small; European garden and wild plants |
 | `bioclip` | BioCLIP 2.5, zero-shot against a species list you provide | Anything on your list; heaviest |
-| `bioclip2` | BioCLIP 2, same species list | The same at half the memory |
+| `bioclip2` | BioCLIP 2, same species list | The same answers at half the memory and time; the best all-rounder in the comparison below |
 | `inat21` | EVA-02 Large fine-tuned on iNaturalist 2021 (4,271 plant species) | Worldwide plants, North American natives included |
 | `inat21-convnext` | ConvNeXt Large fine-tuned on iNaturalist 2021 (same species) | The same, lighter and faster |
 | `mock` | Placeholder results, no model | Testing the API and UI |
@@ -14,8 +14,8 @@ A small self-hosted plant identification service: a FastAPI backend with swappab
 ## Quick start (no model files needed)
 
 ```bash
-docker compose --profile cpu build
-ENABLE_MOCK=1 docker compose --profile cpu up
+ENABLE_MOCK=1 docker compose --profile cpu up --build
+ENABLE_MOCK=1 podman-compose --profile cpu up --build   # the same with Podman
 ```
 
 Open http://localhost:8000, drop in a photo, choose **Identify**. The mock model returns fixed placeholder names; it only proves the plumbing works.
@@ -57,7 +57,7 @@ The 1,081 species were picked for the dataset, not for being common: dandelion, 
 The page offers two BioCLIP checkpoints that share one species list:
 
 - `bioclip`: BioCLIP 2.5 Huge by default, `hf-hub:imageomics/bioclip-2.5-vith14` (ViT-H/14, 3.9 GB download, about 7.7 GiB of RAM). `BIOCLIP_MODEL` swaps in another open_clip checkpoint, for example `hf-hub:imageomics/bioclip` (the first BioCLIP: ViT-B/16, 1.5 GiB, about 0.2 s per photo on CPU).
-- `bioclip2`: BioCLIP 2, `hf-hub:imageomics/bioclip-2` (ViT-L/14, 1.7 GB download, about 3.6 GiB, 2-4x faster than 2.5 on CPU).
+- `bioclip2`: BioCLIP 2, `hf-hub:imageomics/bioclip-2` (ViT-L/14, 1.7 GB download, about 3.6 GiB of RAM, about twice as fast as 2.5).
 
 Both download from Hugging Face on first use into `models/hf` (needs internet once; afterwards they run offline). The page names the checkpoint in use.
 
@@ -101,17 +101,21 @@ Their license is CC BY-NC 4.0: non-commercial use only.
 
 ### How the models compare
 
-Sixteen photos from Wikipedia and Wikimedia Commons: ten species that are in PlantNet-300K, and six California or garden plants that are not (California poppy, poison oak, coast live oak, dandelion, English ivy, sunflower). CPU only, on a 12-core Ryzen AI 9 HX 370, one run per model while other programs were busy, so read the times as rough: they varied up to 2x between runs.
+Sixteen photos from Wikipedia and Wikimedia Commons: ten species that are in PlantNet-300K, and six California or garden plants that are not (California poppy, poison oak, coast live oak, dandelion, English ivy, sunflower). Both BioCLIP entries used the 5,035-name list described above.
 
-| Model | Names it can return | Top-1, 10 PlantNet species | Top-1, 6 California/garden | Time per photo | RAM |
-|---|---|---|---|---|---|
-| `plantnet300k` | 1,081 | 10 | 0 (none listed) | 0.04 s | 0.5 GiB |
-| `bioclip` (2.5), 5,035-name list | 5,035 | 10 | 6 | 1.9 s | 7.7 GiB |
-| `bioclip2`, 5,035-name list | 5,035 | 10 | 6 | 1.2 s | 3.6 GiB |
-| `inat21` | 4,271 | 8 | 5 | 1.8 s | 2.7 GiB |
-| `inat21-convnext` | 4,271 | 8 | 5 | 1.2 s | 2.0 GiB |
+| Model | Names it can return | Top-1, 10 PlantNet species | Top-1, 6 California/garden | CPU, 12 cores | Radeon 890M | RAM (CPU) |
+|---|---|---|---|---|---|---|
+| `plantnet300k` | 1,081 | 10 | 0 (none listed) | 22 ms | 9 ms | 0.5 GiB |
+| `bioclip` (2.5) | 5,035 | 10 | 6 | 0.96 s | 1.12 s | 7.7 GiB |
+| `bioclip2` | 5,035 | 10 | 6 | 0.55 s | 0.48 s | 3.6 GiB |
+| `inat21` | 4,271 | 8 | 5 | 1.12 s | 3.7 s | 2.7 GiB |
+| `inat21-convnext` | 4,271 | 8 | 5 | 0.63 s | 0.89 s | 2.0 GiB |
 
-Time per photo is the warm median of 20 runs; RAM is the peak of a process with that one model loaded. With all five loaded, as after a compare run, the server held 7.9 GiB and peaked at 9.9 GiB while loading them. The iNat21 models' two PlantNet "misses" are the ZZ plant, which they don't list, and *Anemone nemorosa*, which they name correctly by its newer name *Anemonoides nemorosa*. Both put dandelion second, behind *Taraxacum erythrospermum*. A PlantCLEF 2024 classifier (DINOv2 ViT-B/14, 7,806 European species, `vincent-espitalier/dino-v2-reg4-with-plantclef2024-weights`) was tested too and left out: 5 of 16 top-1.
+BioCLIP 2 is the best all-rounder here: every photo right, like BioCLIP 2.5, at half the memory and about half the time. Sixteen clear photos make a smoke test, not an evaluation.
+
+Times are the server's own `latency_ms` (the model only, not the upload): the warm median of 20 requests through the API of the CPU and ROCm containers under Podman on a Ryzen AI 9 HX 370 laptop. The models run in fp32, which this iGPU does slowly (see AMD GPU notes), so the GPU only helps PlantNet-300K and BioCLIP 2; EVA-02 on the GPU ranged from 1.5 to 9.6 s. Every model named the same plants on the GPU as on the CPU, under Docker as under Podman; one GPU run under Docker was noisier (BioCLIP 2.5 took 1.2 to 4.3 s per photo), so the table uses the Podman runs. RAM is the peak of a CPU process with that one model loaded; with all five loaded on the CPU, as after a compare run, the server held 7.9 GiB and peaked at 9.9 GiB while loading them.
+
+The iNat21 models' two PlantNet "misses" are the ZZ plant, which they don't list, and *Anemone nemorosa*, which they name correctly by its newer name *Anemonoides nemorosa*. Both put dandelion second, behind *Taraxacum erythrospermum*. A PlantCLEF 2024 classifier (DINOv2 ViT-B/14, 7,806 European species, `vincent-espitalier/dino-v2-reg4-with-plantclef2024-weights`) was tested too and left out: 5 of 16 top-1.
 
 ## Run
 
@@ -120,24 +124,30 @@ docker compose --profile cpu  up --build -d   # CPU
 docker compose --profile rocm up --build -d   # AMD GPU (Radeon 890M etc.)
 ```
 
-The page shows which device is in use and which models are ready. A model that isn't ready says what's missing.
+Docker and Podman run the same file, tested with Docker Engine 29.8 (Compose 5.5) and Podman 5.8 (podman-compose 1.6). With Podman, use `podman-compose` in place of `docker compose`. `podman compose`, with a space, hands off to Docker's compose plugin when that is installed, and then fails with `failed to connect to the docker API at unix:///run/user/1000/podman/podman.sock` because Podman's API socket is not running; `PODMAN_COMPOSE_PROVIDER=podman-compose podman compose ...` makes it use podman-compose instead. The ROCm image is large: a 10 GB download that takes 30 GB on disk under Podman and 40 GB under Docker, which keeps the download as well.
 
-### AMD GPU notes (untested)
+The page shows which device is in use and which models are ready. A model that isn't ready says what's missing. To preselect the model that did best in the comparison above, set `DEFAULT_BACKEND=bioclip2` (see Environment variables).
 
-`Dockerfile.rocm` is built from ROCm/PyTorch conventions; I had no AMD hardware to try it on. If the page says `cpu` when you expected the GPU:
+### AMD GPU notes
+
+Tested on a Radeon 890M (gfx1150, Ryzen AI 9 HX 370) under Fedora 44, with rootless Podman and with Docker Engine. `Dockerfile.rocm` builds on `rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0` (ROCm 7.2.4, PyTorch 2.10), which supports gfx1150 natively: `HSA_OVERRIDE_GFX_VERSION` is not needed, so leave it unset. To check that the container sees the GPU:
 
 ```bash
 docker compose --profile rocm exec plant-id-rocm \
   python -c "import torch; print(torch.cuda.is_available(), torch.version.hip)"
 ```
 
-- `False`: check that `/dev/kfd` and `/dev/dri` exist on the host and that your user is in the `video` and `render` groups.
-- RDNA 3.5 GPUs like the 890M need a ROCm release that supports them. Reports from other projects say ROCm 6.4.3 does not and 6.4.4 or newer does, and 7.2 supports them natively. Make sure the `rocm/pytorch` tag you pull is new enough; older stacks needed `HSA_OVERRIDE_GFX_VERSION=11.0.0` (commented out in `docker-compose.yml`).
+It should print `True 7.2.53211`, and the page should say it is running on `ROCm GPU (AMD Radeon 890M Graphics)`.
+
+- `Memory critical error by agent node-0 ... Reason: Memory in use.` followed by a core dump: SELinux stopped the container from mapping `/dev/kfd`. The compose file sets `label=disable` for the ROCm service; `--privileged` also works. The host-wide alternative, `sudo setsebool -P container_use_devices true`, was not tested here. This came up only under Podman: Docker Engine leaves its SELinux support off unless you enable it, and its containers ran unconfined (`spc_t`).
+- `Unable to find group render`: the image has no `render` group, so the compose file adds only `video`. On the Fedora 44 test host `/dev/kfd` and `/dev/dri/renderD128` are open to every user anyway; on other hosts check that they exist and that the container can open them.
 - Set `DEVICE=cpu` to force the CPU, or `DEVICE=cuda` to fail loudly if no GPU is visible.
+- An iGPU keeps the weights in GTT, system memory it borrows: about 8 GiB with all five models loaded, plus 2.8 GB of ordinary RAM for the container.
+- This iGPU is slow at fp32, the precision the models run in: a 4096×4096 matrix multiply reached 0.1 TFLOPS in fp32 and 1.6 TFLOPS in fp16. Under fp16 autocast, BioCLIP 2's image encoder took 111 ms instead of 480 and EVA-02 336 ms instead of 1,469, with outputs matching the CPU's (cosine similarity 1.00000). The service does not use fp16 yet. `TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1` gave mixed results in one run (BioCLIP 2 faster in fp16, EVA-02 slower in both precisions and three times slower in fp32), so it is not set.
 
 ## Put it on the network
 
-There is no login. Anyone who can reach the port can upload images and use your CPU/GPU, so put it behind something. With Caddy:
+There is no login. Anyone who can reach the port can upload images and use your CPU/GPU, so put it behind something. The compose file publishes port 8000 on every network interface; on Fedora Workstation, whose default firewall zone opens ports 1025 to 65535, other machines on your network can reach it. If only a proxy on the same machine should, change the port line to `"127.0.0.1:8000:8000"`. With Caddy:
 
 ```
 plants.example.com {
@@ -189,6 +199,8 @@ The first request to each model loads it and is slow; `cold_start` and `load_ms`
 | `PLANTNET_*` | see above | Weights, species files, architecture, pickle opt-in |
 | `BIOCLIP_MODEL`, `BIOCLIP_LABELS` | see above | Hub id and label list |
 
+`docker-compose.yml` takes `DEVICE`, `DEFAULT_BACKEND` and `ENABLE_MOCK` from your shell or from a `.env` file beside it, for example `DEFAULT_BACKEND=bioclip2 docker compose --profile rocm up -d`. Add any other variable under `environment:` in that file.
+
 ## Layout
 
 ```
@@ -203,12 +215,13 @@ To add a model, subclass `Backend` in `app/backends/`, implement `is_available`,
 
 ## What has and hasn't been tested
 
-Tested on a Ryzen AI 9 HX 370 laptop, CPU only:
+Tested on a Ryzen AI 9 HX 370 laptop with Fedora 44:
 
 - Every model against its real weights (the comparison above), and the BioCLIP label cache across restarts.
+- Both images under Podman (`podman-compose`) and under Docker Engine (`docker compose`): the CPU image, and the ROCm image on the Radeon 890M, where all five models ran on the GPU and named the same plants as on the CPU. Docker runs the container as root, so anything it writes into `models/` (a new BioCLIP label cache, a first download) will belong to root; in these runs everything was already there and it wrote nothing.
 - The page in Chromium, driven with Playwright: one model and compare mode with all five models, light and dark mode at 1280 and 390 pixels wide, and a 1.7 MB phone photo, which the page shrank to 0.3 MB before upload and kept upright. No console errors, and no requests to anything but the server itself.
 - `pytest`: the API, label and checkpoint parsing, and the PlantNet-300K and iNat21 load and predict code on small random-weight models (skipped without PyTorch). Run it with `pip install -r requirements-dev.txt && pytest`.
 
-**Not tested yet:** the ROCm image on the GPU, the "Take photo" button (it only shows on touch screens), and drag-and-drop or paste.
+**Not tested yet:** the "Take photo" button (it only shows on touch screens), drag-and-drop or paste, and Docker with its SELinux support turned on.
 
 Identification from a photo is a lead, not a verdict. Don't eat or handle a plant based on this alone.

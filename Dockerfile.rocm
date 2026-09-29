@@ -1,12 +1,13 @@
-# AMD GPU image (Radeon 890M and other ROCm-supported GPUs).
-# UNTESTED: written from ROCm/PyTorch conventions. If `torch.cuda.is_available()` is False
-# inside the container, see README "Troubleshooting".
-FROM rocm/pytorch:latest
+# AMD GPU image. Tested on a Radeon 890M (gfx1150): ROCm 7.2 supports it natively, so
+# HSA_OVERRIDE_GFX_VERSION is not needed. Pinned because rocm/pytorch:latest moves; the full
+# name lets Podman pull it without asking which registry to use.
+FROM docker.io/rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 MODELS_DIR=/models HF_HOME=/models/hf
 WORKDIR /srv
 COPY requirements.txt .
-# The base image already ships a ROCm build of torch/torchvision; don't replace it.
-RUN pip install -r requirements.txt
+# The base image already ships a ROCm build of torch/torchvision; fail the build if pip replaced it.
+RUN pip install -r requirements.txt \
+ && python -c "import torch; assert torch.version.hip, 'pip replaced the ROCm build of torch'"
 COPY app ./app
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

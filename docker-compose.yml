@@ -1,15 +1,17 @@
-# CPU:   docker compose --profile cpu  up --build
-# ROCm:  docker compose --profile rocm up --build
+# CPU:   docker compose --profile cpu  up --build     or   podman-compose --profile cpu  up --build
+# ROCm:  docker compose --profile rocm up --build     or   podman-compose --profile rocm up --build
 x-common: &common
   ports: ["8000:8000"]
-  volumes: ["./models:/models"]
+  # :z lets SELinux hosts (Fedora, RHEL) share the folder with the container; ignored elsewhere.
+  volumes: ["./models:/models:z"]
   restart: unless-stopped
   environment:
-    DEVICE: auto
-    # DEFAULT_BACKEND: plantnet300k
+    # These three come from your shell or a .env file beside this one, e.g. DEFAULT_BACKEND=bioclip2
+    DEVICE: ${DEVICE:-auto}                 # auto, cpu, or cuda (ROCm also uses cuda)
+    DEFAULT_BACKEND: ${DEFAULT_BACKEND:-}   # model preselected in the page; empty = first ready one
+    ENABLE_MOCK: ${ENABLE_MOCK:-0}          # 1 = placeholder model for UI testing
     # BIOCLIP_MODEL: hf-hub:imageomics/bioclip-2.5-vith14   # checkpoint of the "bioclip" entry; "bioclip2" is fixed
     # PLANTNET_ALLOW_PICKLE: "1"   # only for the official, trusted checkpoint if safe loading fails
-    # ENABLE_MOCK: "1"             # placeholder model for UI testing
 
 services:
   plant-id:
@@ -22,7 +24,7 @@ services:
     profiles: ["rocm"]
     build: { context: ., dockerfile: Dockerfile.rocm }
     devices: ["/dev/kfd:/dev/kfd", "/dev/dri:/dev/dri"]
-    group_add: ["video", "render"]
-    security_opt: ["seccomp=unconfined"]
-    # environment additions if the GPU is not picked up (see README):
-    #   HSA_OVERRIDE_GFX_VERSION: "11.0.0"
+    group_add: ["video"]   # the image has no "render" group, and naming it stops both engines
+    # label=disable: with SELinux enforcing, the container may not map /dev/kfd and ROCm aborts
+    # with "Memory critical error ... Memory in use". No effect on hosts without SELinux.
+    security_opt: ["seccomp=unconfined", "label=disable"]
