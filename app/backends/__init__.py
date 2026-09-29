@@ -41,7 +41,7 @@ def list_backends() -> list[dict]:
         out.append(
             {
                 "id": cls.id,
-                "label": cls.label,
+                "label": b.label,
                 "description": cls.description,
                 "available": ok,
                 "reason": reason,

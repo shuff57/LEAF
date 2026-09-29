@@ -13,7 +13,7 @@ from PIL import Image
 
 from ..config import get_settings
 from ..device import pick_device
-from ..labels import read_json, read_label_lines
+from ..labels import read_json, read_label_lines, scientific_name
 from .base import Backend, BackendUnavailable, Prediction
 
 log = logging.getLogger(__name__)
@@ -22,12 +22,12 @@ PROMPT = "a photo of {}."
 
 
 def _load_labels() -> list[str]:
-    """BIOCLIP_LABELS if present, otherwise reuse the PlantNet-300K species names."""
+    """BIOCLIP_LABELS if present, otherwise the PlantNet-300K species without author citations."""
     s = get_settings()
     if s.bioclip_labels.is_file():
         return read_label_lines(s.bioclip_labels)
     if s.plantnet_species_json.is_file():
-        return sorted(set(read_json(s.plantnet_species_json).values()))
+        return sorted({scientific_name(n) for n in read_json(s.plantnet_species_json).values()})
     raise BackendUnavailable(
         f"No label list. Create {s.bioclip_labels} (one species per line) "
         "or provide the PlantNet-300K species file."
@@ -36,8 +36,12 @@ def _load_labels() -> list[str]:
 
 class BioClip(Backend):
     id = "bioclip"
-    label = "BioCLIP"
     description = "Zero-shot over your own species list. Broader coverage, heavier to run."
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Name the checkpoint, so the picker and each result say which BioCLIP answered.
+        self.label = f"BioCLIP ({get_settings().bioclip_model.rsplit('/', 1)[-1]})"
 
     def is_available(self) -> tuple[bool, str]:
         s = get_settings()

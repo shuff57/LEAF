@@ -5,7 +5,7 @@ A small self-hosted plant identification service: a FastAPI backend with swappab
 | Model | What it is | Good for |
 |---|---|---|
 | `plantnet300k` | ResNet trained on Pl@ntNet-300K (1,081 species) | Fast, small; European garden and wild plants |
-| `bioclip` | BioCLIP, zero-shot against a species list you provide | Broader coverage; heavier |
+| `bioclip` | BioCLIP 2.5, zero-shot against a species list you provide | Broader coverage; heavier |
 | `mock` | Placeholder results, no model | Testing the API and UI |
 
 ## Quick start (no model files needed)
@@ -17,7 +17,7 @@ ENABLE_MOCK=1 docker compose --profile cpu up
 
 Open http://localhost:8000, drop in a photo, choose **Identify**. The mock model returns fixed placeholder names; it only proves the plumbing works.
 
-Without Docker: `pip install -r requirements.txt` (plus a PyTorch build), then `MODELS_DIR=./models ENABLE_MOCK=1 uvicorn app.main:app --port 8000`.
+Without Docker: `pip install -r requirements.txt` (plus a PyTorch build), then `MODELS_DIR=./models HF_HOME=./models/hf ENABLE_MOCK=1 uvicorn app.main:app --port 8000`. `HF_HOME` keeps the BioCLIP download in `models/hf`, as in the container.
 
 ## Add the real models
 
@@ -51,10 +51,15 @@ The 1,081 species were picked for the dataset, not for being common: dandelion, 
 
 ### BioCLIP
 
+- The default is BioCLIP 2.5 Huge, `hf-hub:imageomics/bioclip-2.5-vith14` (ViT-H/14, 3.9 GB download, about 7.7 GiB of RAM). `BIOCLIP_MODEL=hf-hub:imageomics/bioclip-2` selects BioCLIP 2 (ViT-L/14, 1.7 GB, about 3.6 GiB, 4x faster on CPU). The page names the checkpoint in use.
 - The model downloads from Hugging Face on first use into `models/hf` (needs internet once; afterwards it runs offline).
-- BioCLIP only returns species that are on your list. Copy `models/bioclip/labels.example.txt` to `labels.txt` and edit it, one species per line. If there is no `labels.txt`, the PlantNet-300K species names are used.
-- The default is `hf-hub:imageomics/bioclip-2`. I could not confirm the hub id of the newer BioCLIP 2.5 release, so check its model card and set `BIOCLIP_MODEL` to that id.
-- Label embeddings are computed once and cached in `models/bioclip/cache`.
+- BioCLIP only returns species that are on its list, `models/bioclip/labels.txt`, one scientific name per line (`labels.example.txt` shows the format). Without that file it uses the PlantNet-300K species with author citations removed and duplicates merged (1,019 names). To extend that list, write it out and append your own species:
+
+  ```bash
+  python -c "import json; from app.labels import scientific_name; print('\n'.join(sorted({scientific_name(n) for n in json.load(open('models/plantnet300k/plantnet300K_species_id_2_name.json')).values()})))" > models/bioclip/labels.txt
+  ```
+
+- Label embeddings are computed once per model and label list and cached in `models/bioclip/cache`. The first start with a new list is slow on CPU (1,019 names: 3.5 minutes for BioCLIP 2.5, 40 seconds for BioCLIP 2 on a 12-core Ryzen AI 9 HX 370); later starts take about 10 seconds.
 
 ## Run
 

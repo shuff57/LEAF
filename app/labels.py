@@ -64,3 +64,17 @@ def read_label_lines(path: Path) -> list[str]:
     if not labels:
         raise ValueError(f"{path} contains no labels")
     return labels
+
+
+def scientific_name(name: str) -> str:
+    """Drop the author citation: "Pelargonium x hortorum L.H. Bailey" -> "Pelargonium × hortorum".
+
+    "Lavandula spp." becomes the bare genus. PlantNet-300K lists some species several
+    times under different citations and hybrid signs (x or ×), so de-duplicate the results.
+    """
+    words = name.split()
+    if words[1:2] == ["spp."]:
+        return words[0]
+    if words[1:2] in (["x"], ["×"]):
+        return f"{words[0]} × {words[2]}"
+    return " ".join(words[:2])

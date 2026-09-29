@@ -59,7 +59,7 @@ class Settings:
             ),
             plantnet_arch=os.environ.get("PLANTNET_ARCH", "resnet18"),
             plantnet_allow_pickle=_flag("PLANTNET_ALLOW_PICKLE"),
-            bioclip_model=os.environ.get("BIOCLIP_MODEL", "hf-hub:imageomics/bioclip-2"),
+            bioclip_model=os.environ.get("BIOCLIP_MODEL", "hf-hub:imageomics/bioclip-2.5-vith14"),
             bioclip_labels=Path(
                 os.environ.get("BIOCLIP_LABELS", models_dir / "bioclip" / "labels.txt")
             ),

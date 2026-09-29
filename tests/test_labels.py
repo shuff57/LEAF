@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.labels import build_class_names, extract_state_dict, read_label_lines
@@ -48,3 +50,20 @@ def test_read_label_lines(tmp_path):
     empty.write_text("# nothing\n")
     with pytest.raises(ValueError):
         read_label_lines(empty)
+
+
+def test_bioclip_fallback_labels_drop_citations_and_duplicates(tmp_path, monkeypatch):
+    species = {
+        "1": "Tradescantia zebrina Bosse",
+        "2": "Tradescantia zebrina hort. ex Bosse",
+        "3": "Pelargonium × hortorum L.H. Bailey",
+        "4": "Pelargonium x hortorum L.H. Bailey",
+        "5": "Lavandula spp.",
+    }
+    d = tmp_path / "plantnet300k"
+    d.mkdir()
+    (d / "plantnet300K_species_id_2_name.json").write_text(json.dumps(species))
+    monkeypatch.setenv("MODELS_DIR", str(tmp_path))
+    from app.backends.bioclip import _load_labels
+
+    assert _load_labels() == ["Lavandula", "Pelargonium × hortorum", "Tradescantia zebrina"]
