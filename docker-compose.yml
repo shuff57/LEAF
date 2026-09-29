@@ -7,7 +7,7 @@ x-common: &common
   environment:
     DEVICE: auto
     # DEFAULT_BACKEND: plantnet300k
-    # BIOCLIP_MODEL: hf-hub:imageomics/bioclip-2   # lighter than the default, BioCLIP 2.5 (ViT-H/14)
+    # BIOCLIP_MODEL: hf-hub:imageomics/bioclip-2.5-vith14   # checkpoint of the "bioclip" entry; "bioclip2" is fixed
     # PLANTNET_ALLOW_PICKLE: "1"   # only for the official, trusted checkpoint if safe loading fails
     # ENABLE_MOCK: "1"             # placeholder model for UI testing
 

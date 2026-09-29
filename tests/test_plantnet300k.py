@@ -2,15 +2,13 @@ import argparse
 import json
 
 import pytest
+from PIL import Image
+
+from app.backends.base import BackendUnavailable
+from app.backends.plantnet300k import PlantNet300K
 
 torch = pytest.importorskip("torch")
-pytest.importorskip("torchvision")
-
-from PIL import Image  # noqa: E402
-from torchvision.models import resnet18  # noqa: E402
-
-from app.backends.base import BackendUnavailable  # noqa: E402
-from app.backends.plantnet300k import PlantNet300K  # noqa: E402
+resnet18 = pytest.importorskip("torchvision.models").resnet18
 
 SPECIES = {"30": "Species c", "100": "Species a", "200": "Species b"}
 

@@ -15,6 +15,13 @@ def test_backends_lists_mock_and_reports_missing_weights(client):
     assert body["default"] == "mock"
 
 
+def test_bioclip_entries_name_their_checkpoint(client, monkeypatch):
+    monkeypatch.setenv("BIOCLIP_MODEL", "hf-hub:example/some-bioclip")
+    labels = {b["id"]: b["label"] for b in client.get("/api/backends").json()["backends"]}
+    assert labels["bioclip"] == "BioCLIP (some-bioclip)"
+    assert labels["bioclip2"] == "BioCLIP (bioclip-2)"
+
+
 def test_identify_happy_path(client, jpeg_bytes):
     r = client.post(
         "/api/identify",

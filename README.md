@@ -5,7 +5,10 @@ A small self-hosted plant identification service: a FastAPI backend with swappab
 | Model | What it is | Good for |
 |---|---|---|
 | `plantnet300k` | ResNet trained on Pl@ntNet-300K (1,081 species) | Fast, small; European garden and wild plants |
-| `bioclip` | BioCLIP 2.5, zero-shot against a species list you provide | Broader coverage; heavier |
+| `bioclip` | BioCLIP 2.5, zero-shot against a species list you provide | Anything on your list; heaviest |
+| `bioclip2` | BioCLIP 2, same species list | The same at half the memory |
+| `inat21` | EVA-02 Large fine-tuned on iNaturalist 2021 (4,271 plant species) | Worldwide plants, North American natives included |
+| `inat21-convnext` | ConvNeXt Large fine-tuned on iNaturalist 2021 (same species) | The same, lighter and faster |
 | `mock` | Placeholder results, no model | Testing the API and UI |
 
 ## Quick start (no model files needed)
@@ -51,15 +54,64 @@ The 1,081 species were picked for the dataset, not for being common: dandelion, 
 
 ### BioCLIP
 
-- The default is BioCLIP 2.5 Huge, `hf-hub:imageomics/bioclip-2.5-vith14` (ViT-H/14, 3.9 GB download, about 7.7 GiB of RAM). `BIOCLIP_MODEL=hf-hub:imageomics/bioclip-2` selects BioCLIP 2 (ViT-L/14, 1.7 GB, about 3.6 GiB, 4x faster on CPU). The page names the checkpoint in use.
-- The model downloads from Hugging Face on first use into `models/hf` (needs internet once; afterwards it runs offline).
-- BioCLIP only returns species that are on its list, `models/bioclip/labels.txt`, one scientific name per line (`labels.example.txt` shows the format). Without that file it uses the PlantNet-300K species with author citations removed and duplicates merged (1,019 names). To extend that list, write it out and append your own species:
+The page offers two BioCLIP checkpoints that share one species list:
 
-  ```bash
-  python -c "import json; from app.labels import scientific_name; print('\n'.join(sorted({scientific_name(n) for n in json.load(open('models/plantnet300k/plantnet300K_species_id_2_name.json')).values()})))" > models/bioclip/labels.txt
-  ```
+- `bioclip`: BioCLIP 2.5 Huge by default, `hf-hub:imageomics/bioclip-2.5-vith14` (ViT-H/14, 3.9 GB download, about 7.7 GiB of RAM). `BIOCLIP_MODEL` swaps in another open_clip checkpoint, for example `hf-hub:imageomics/bioclip` (the first BioCLIP: ViT-B/16, 1.5 GiB, about 0.2 s per photo on CPU).
+- `bioclip2`: BioCLIP 2, `hf-hub:imageomics/bioclip-2` (ViT-L/14, 1.7 GB download, about 3.6 GiB, 2-4x faster than 2.5 on CPU).
 
-- Label embeddings are computed once per model and label list and cached in `models/bioclip/cache`. The first start with a new list is slow on CPU (1,019 names: 3.5 minutes for BioCLIP 2.5, 40 seconds for BioCLIP 2 on a 12-core Ryzen AI 9 HX 370); later starts take about 10 seconds.
+Both download from Hugging Face on first use into `models/hf` (needs internet once; afterwards they run offline). The page names the checkpoint in use.
+
+BioCLIP only returns species that are on its list, `models/bioclip/labels.txt`, one scientific name per line (`labels.example.txt` shows the format). Without that file it uses the 1,019 PlantNet-300K species (author citations removed, duplicates merged). None of the six California and garden plants in the comparison below is on that list, so no BioCLIP could name them. Adding the 4,271 iNaturalist 2021 plant species from `models/inat21/config.json` (next section) gives 5,035 names, and BioCLIP 2 and 2.5 then named all six. Run this from this directory to write that list (PlantNet names only if the iNat21 config is absent), then append your own species at the end:
+
+```bash
+python - > models/bioclip/labels.txt <<'EOF'
+import json, os
+from app.labels import scientific_name
+names = {scientific_name(n) for n in json.load(open("models/plantnet300k/plantnet300K_species_id_2_name.json")).values()}
+if os.path.exists("models/inat21/config.json"):
+    cfg = json.load(open("models/inat21/config.json"))
+    names |= {n for n in cfg["label_names"] if cfg["label_descriptions"][n].endswith(", Plant")}
+print("\n".join(sorted(names)))
+EOF
+```
+
+Label embeddings are computed once per model and list and cached in `models/bioclip/cache`. That first start is slow on CPU: for 5,035 names about 6 minutes for BioCLIP 2 and 19 minutes for BioCLIP 2.5 on a 12-core Ryzen AI 9 HX 370 (1,019 names: 40 seconds and 3.5 minutes). Later starts take about 10 seconds. Copy `models/bioclip/cache` along with the weights when you deploy.
+
+### iNaturalist 2021 classifiers
+
+Two `timm` models fine-tuned on the iNaturalist 2021 competition set. They know 10,000 species of every kind; the service keeps the 4,271 plants, so every answer is a plant. Many North American natives that PlantNet-300K lacks are among them (California poppy, poison oak, coast live oak).
+
+| Picker entry | Folder | Hugging Face repo | Download |
+|---|---|---|---|
+| `inat21`, EVA-02 Large | `models/inat21/` | `timm/eva02_large_patch14_clip_336.merged2b_ft_inat21` | 1.26 GB |
+| `inat21-convnext`, ConvNeXt Large | `models/inat21-convnext/` | `timm/convnext_large_mlp.laion2b_ft_augreg_inat21` | 0.86 GB |
+
+Each folder holds the repo's `config.json` (it carries the species names) and `model.safetensors`:
+
+```bash
+H=https://huggingface.co/timm
+mkdir -p models/inat21 models/inat21-convnext
+curl -L -o models/inat21/config.json                $H/eva02_large_patch14_clip_336.merged2b_ft_inat21/resolve/main/config.json
+curl -L -o models/inat21/model.safetensors          $H/eva02_large_patch14_clip_336.merged2b_ft_inat21/resolve/main/model.safetensors
+curl -L -o models/inat21-convnext/config.json       $H/convnext_large_mlp.laion2b_ft_augreg_inat21/resolve/main/config.json
+curl -L -o models/inat21-convnext/model.safetensors $H/convnext_large_mlp.laion2b_ft_augreg_inat21/resolve/main/model.safetensors
+```
+
+Their license is CC BY-NC 4.0: non-commercial use only.
+
+### How the models compare
+
+Sixteen photos from Wikipedia and Wikimedia Commons: ten species that are in PlantNet-300K, and six California or garden plants that are not (California poppy, poison oak, coast live oak, dandelion, English ivy, sunflower). CPU only, on a 12-core Ryzen AI 9 HX 370, one run per model while other programs were busy, so read the times as rough: they varied up to 2x between runs.
+
+| Model | Names it can return | Top-1, 10 PlantNet species | Top-1, 6 California/garden | Time per photo | RAM |
+|---|---|---|---|---|---|
+| `plantnet300k` | 1,081 | 10 | 0 (none listed) | 0.04 s | 0.5 GiB |
+| `bioclip` (2.5), 5,035-name list | 5,035 | 10 | 6 | 1.9 s | 7.7 GiB |
+| `bioclip2`, 5,035-name list | 5,035 | 10 | 6 | 1.2 s | 3.6 GiB |
+| `inat21` | 4,271 | 8 | 5 | 1.8 s | 2.7 GiB |
+| `inat21-convnext` | 4,271 | 8 | 5 | 1.2 s | 2.0 GiB |
+
+Time per photo is the warm median of 20 runs; RAM is the peak of a process with that one model loaded. The iNat21 models' two PlantNet "misses" are the ZZ plant, which they don't list, and *Anemone nemorosa*, which they name correctly by its newer name *Anemonoides nemorosa*. Both put dandelion second, behind *Taraxacum erythrospermum*. A PlantCLEF 2024 classifier (DINOv2 ViT-B/14, 7,806 European species, `vincent-espitalier/dino-v2-reg4-with-plantclef2024-weights`) was tested too and left out: 5 of 16 top-1.
 
 ## Run
 

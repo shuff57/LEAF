@@ -5,11 +5,12 @@ import threading
 import time
 
 from .base import Backend, BackendUnavailable
-from .bioclip import BioClip
+from .bioclip import BioClip, BioClip2
+from .inat21 import INat21, INat21ConvNeXt
 from .mock import Mock
 from .plantnet300k import PlantNet300K
 
-_CLASSES: list[type[Backend]] = [PlantNet300K, BioClip, Mock]
+_CLASSES: list[type[Backend]] = [PlantNet300K, BioClip, BioClip2, INat21, INat21ConvNeXt, Mock]
 _instances: dict[str, Backend] = {}
 _locks: dict[str, threading.Lock] = {c.id: threading.Lock() for c in _CLASSES}
 _registry_lock = threading.Lock()
