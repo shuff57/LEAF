@@ -25,15 +25,23 @@ Everything model-related lives in `./models`, mounted at `/models`.
 
 ### PlantNet-300K ResNet
 
-Put these in `models/plantnet300k/`:
+Put these in `models/plantnet300k/` (these names are the service's defaults):
 
-| File | Where to get it |
+| File | Download with `curl -L -o <file> '<url>'` |
 |---|---|
-| `resnet18_weights_best_acc.tar` | Pretrained models linked from the [PlantNet-300K repo](https://github.com/plantnet/PlantNet-300K) README |
-| `plantnet300K_species_id_2_name.json` | Same repo / the dataset on Zenodo |
-| `class_idx_to_species_id.json` | Same repo (optional but preferred, it removes any guesswork about class order) |
+| `resnet18_weights_best_acc.tar` (94 MB) | `https://seafile.plantnet.org/d/01ab6658dad6447c95ae/files/?p=/resnet18_weights_best_acc.tar&dl=1` |
+| `plantnet300K_species_id_2_name.json` | `https://seafile.plantnet.org/d/bed81bc15e8944969cf6/files/?p=/plantnet300K_species_id_2_name.json&dl=1` |
+| `class_idx_to_species_id.json` | `https://seafile.plantnet.org/d/bed81bc15e8944969cf6/files/?p=/class_idx_to_species_id.json&dl=1` |
 
-I couldn't download these from my sandbox, so the filenames above are what I expect from the repo. If yours differ, set `PLANTNET_WEIGHTS`, `PLANTNET_SPECIES_JSON` and `PLANTNET_CLASS_IDX_JSON`. For a different ResNet depth set `PLANTNET_ARCH` (for example `resnet50`).
+These are the "pre-trained models" and "metadata files" shares linked from the [PlantNet-300K README](https://github.com/plantnet/PlantNet-300K). Share links can be re-created, so check the files against the SHA-256 sums of the verified copies:
+
+```
+72140ea713acfe712914a7ee29494aad7b8cb1839091902750ddcee40a9ea150  resnet18_weights_best_acc.tar
+9c8185db8ebb75958ffa77c8c1b1012b8e3dd493fc64c7cfb33f2049df084d23  plantnet300K_species_id_2_name.json
+12139cf778d9c960c53c484be4d37f100928e52e27d60d39f4897862a58fe2ec  class_idx_to_species_id.json
+```
+
+For other file names set `PLANTNET_WEIGHTS`, `PLANTNET_SPECIES_JSON` and `PLANTNET_CLASS_IDX_JSON`. For another ResNet depth from the same share set `PLANTNET_ARCH` (for example `resnet50`).
 
 If loading fails with a message about "safe mode", the official checkpoint contains non-tensor objects. If you trust the file, set `PLANTNET_ALLOW_PICKLE=1`.
 
