@@ -5,7 +5,7 @@ import logging
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -19,6 +19,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("plant-id")
 
 app = FastAPI(title="plant-id", docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+
+@app.middleware("http")
+async def isolate(request: Request, call_next):
+    """Cross-origin isolation: without it the page's on-device models run on one CPU thread.
+    And no-cache, so a browser checks for a newer page or models.json instead of mixing an old
+    model list with rebuilt model files; the page keeps the model files in its own cache anyway."""
+    response = await call_next(request)
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    response.headers.setdefault("Cache-Control", "no-cache")
+    return response
 
 MAX_SIDE = 1536  # photos are downscaled before inference; the models resize anyway
 
@@ -140,6 +152,10 @@ def identify(
         ],
     }
 
+
+# The on-device models and ONNX Runtime Web, which web/build.py writes; read when the service starts.
+if (get_settings().models_dir / "browser").is_dir():
+    app.mount("/models", StaticFiles(directory=get_settings().models_dir / "browser"), name="models")
 
 # Static UI last, so /api/* routes win.
 app.mount(

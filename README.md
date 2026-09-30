@@ -1,6 +1,6 @@
-# plant-id
+# L.E.A.F.
 
-A small self-hosted plant identification service: a FastAPI backend with swappable models, plus a test web page served from the same container.
+Lightweight Engine for Assessing Flora: a small self-hosted plant identification service. A FastAPI backend with swappable models serves a web page from the same container, and the page can also run models in the browser, on the device that took the photo. The browser-only version is live at https://leaf.lefthanddev.com.
 
 | Model | What it is | Good for |
 |---|---|---|
@@ -179,34 +179,58 @@ It should print `True 7.2.53211`, and `curl localhost:8000/api/health` should re
 - An iGPU keeps the weights in GTT, system memory it borrows: about 8 GiB with all five models loaded, plus 2.8 GB of ordinary RAM for the container.
 - This iGPU is slow at fp32, the precision the models run in: a 4096×4096 matrix multiply reached 0.1 TFLOPS in fp32 and 1.6 TFLOPS in fp16. Under fp16 autocast, BioCLIP 2's image encoder took 111 ms instead of 480 and EVA-02 336 ms instead of 1,469, with outputs matching the CPU's (cosine similarity 1.00000). The service does not use fp16 yet. `TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1` gave mixed results in one run (BioCLIP 2 faster in fp16, EVA-02 slower in both precisions and three times slower in fp32), so it is not set.
 
-## Running the model in the browser (test page)
+## Models on this device
 
-`web/` is a separate static test page that runs BioCLIP 2.5 Mobile, BioCLIP 1 or BioCLIP 2 inside the browser with [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) 1.30: on the GPU through WebGPU, or on the CPU through WebAssembly. Photos never leave the device, and the browser keeps each model after its first download. It uses the service's species list and common names. BioCLIP 2.5 itself is not built for it: 1.26 GB even in fp16.
+When `models/browser` holds a build (below), the page also lists models under **On this device**: BioCLIP 2.5 Mobile, BioCLIP 1, BioCLIP 2 and BioCLIP 2.5, which run in the browser with [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) 1.30. Photos never leave the device, and the browser keeps each model after its first download; the bar under the title shows the download as it goes. They use the service's species list and common names, and the service serves their files at `/models/`. A model runs on the GPU through WebGPU when the browser offers it, and otherwise on the CPU through WebAssembly; if the GPU fails to start it, the page moves it to the CPU by itself. One on-device model is kept loaded at a time, and compare mode runs it next to the server's models.
+
+The same page without the server is L.E.A.F. at https://leaf.lefthanddev.com, on Cloudflare. It opens with BioCLIP 2.5 Mobile on phones and tablets (a coarse pointer) and BioCLIP 2 elsewhere, and starts loading it at once.
 
 ```bash
 pip install onnx onnxscript     # for build.py only; onnxruntime is in requirements.txt
 .venv/bin/python web/build.py   # writes models/browser/: fp16 ONNX models, label tables, ONNX Runtime Web
-python3 web/serve.py            # http://127.0.0.1:8002
+python3 web/pages.py            # writes models/pages/: the page and those files, ready for Cloudflare
+wrangler deploy --name leaf --assets models/pages --compatibility-date 2026-09-30 --domain leaf.lefthanddev.com
 ```
 
-`build.py` exports the BioCLIP 1 and 2 image encoders to fp16 ONNX with the colour normalisation inside the graph (on the 16 test photos their embeddings matched PyTorch's with a cosine similarity of 0.99999 or better), copies the Mobile model, and writes each model's label table as fp16. It reads the label tables from `models/bioclip/cache`, so run each model on the service once first; it says which one is missing.
+`build.py` exports the BioCLIP 1, 2 and 2.5 image encoders to fp16 ONNX with the colour normalisation inside the graph and the weights in a file of their own (`<model>.onnx.data`); on four photos their embeddings matched PyTorch's with a cosine similarity of 0.99998 or better. It copies the Mobile model, writes each model's label table as fp16, and cuts every file over 24 MiB into parts. It reads the label tables from `models/bioclip/cache`, so run each model on the service once first; it says which one is missing. The build took 6 minutes on the laptop and fills 2.0 GB. The service looks for `models/browser` when it starts, so restart it after the first build.
 
-Chrome 154 on the Ryzen AI 9 HX 370 laptop, the same 16 photos:
+Chrome 154 on the Ryzen AI 9 HX 370 laptop, the same 16 photos, run on the earlier test page with the same models and preprocessing:
 
 | Model | Download: model + label table | Top-1, of 16 | Same top-1 as the service | CPU, WebAssembly, 4 threads | GPU, WebGPU, Radeon 890M |
 |---|---|---|---|---|---|
 | BioCLIP 2.5 Mobile | 24 + 10 MB | 12 | 15 | 0.15 s | 0.05 s |
 | BioCLIP 1 | 173 + 5 MB | 16 | 15 | 0.90 s | 0.08 s |
 | BioCLIP 2 | 610 + 8 MB | 16 | 16 | 2.1 s | 0.15 s |
+| BioCLIP 2.5 | 1,267 + 10 MB | not run | not run | 4 s | 0.8 s |
 
-- Times are medians per photo, including preparing the photo and scoring the 5,035 names. ONNX Runtime Web adds 14 MB for the CPU path or 27 MB for the GPU path.
-- From the browser's cache a model was ready in 0.4 s (Mobile), 0.6 s (BioCLIP 1) and 1.5 s (BioCLIP 2) on the GPU, and 0.6, 2.7 and 6.0 s on the CPU. The test downloads came from this machine; over a real connection the download dominates the first visit: 610 MB takes about 100 seconds at 50 Mbps.
+- Times are medians per photo, including preparing the photo and scoring the 5,035 names. BioCLIP 2.5 came later: its times run from Identify to the answer on three photos (one on the CPU), and it named the two plant photos it saw as the service did. ONNX Runtime Web adds 14 MB for the CPU path or 27 MB for the GPU path.
+- From the browser's cache a model was ready in 0.4 s (Mobile), 0.6 s (BioCLIP 1) and 1.5 s (BioCLIP 2) on the GPU, and 0.6, 2.7 and 6.0 s on the CPU. Those downloads came from this machine. From leaf.lefthanddev.com over this laptop's connection, a first visit was ready in 45 s with BioCLIP 2 on the GPU (610 MB downloaded in 39 s) and in 4.5 s with Mobile on the CPU (24 MB in 1.3 s). At 50 Mbps, 610 MB takes about 100 s.
 - In fp16 on the GPU, BioCLIP 2 answered faster in the browser (0.15 s) than the service does on the same laptop (0.42 s on its CPU, 0.48 s on its GPU in fp32).
-- The one disagreement with the service is the coast live oak, a near-tie for the smaller models, and the page shrinks photos with the browser's canvas rather than PIL. In the browser the Mobile model called it an olive tree, while BioCLIP 1 named it correctly there and not on the service.
-- WebGPU on Linux with AMD graphics is off by default. Chrome offered the Radeon only when launched with `--enable-unsafe-webgpu --use-angle=vulkan --enable-features=Vulkan` (and `--disable-vulkan-surface` headless); otherwise use the CPU path. Windows, macOS, ChromeOS, most Android 12+ phones and Safari 26 have it on by default ([WebGPU implementation status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)).
-- The page needs `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` on every response, or WebAssembly runs on one thread. `serve.py` sends them; on Cloudflare Pages a `_headers` file would.
-- Cloudflare Pages takes files up to 25 MiB: the Mobile model, its table and the CPU runtime fit, while BioCLIP 1 and 2 and the 27 MB WebGPU runtime would go on R2 or another host.
+- The one disagreement with the service is the coast live oak, a near-tie for the smaller models, and the page shrinks photos with the browser's canvas rather than PIL. In the browser the Mobile model called it an olive tree, while BioCLIP 1 named it correctly there and not on the service. Scores differ too: on the naked-man orchid, Mobile gave *Orchis italica* 66% on the service, 85% in the browser on the CPU and 93% on the GPU.
+- WebGPU on Linux with AMD graphics is off by default. Chrome offered the Radeon only when launched with `--enable-unsafe-webgpu --use-angle=vulkan --enable-features=Vulkan` (and `--disable-vulkan-surface` headless); otherwise the page uses the CPU. Windows, macOS, ChromeOS, most Android 12+ phones and Safari 26 have it on by default ([WebGPU implementation status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)), and so did Chrome on an iPhone with iOS 26.6.
+- When WebGPU fails to start a model, ONNX Runtime Web's WebGPU build throws a bare number, and trying the CPU in that same build then hung the page at 100% of a core or crashed it (tested by making `requestDevice` fail). So the page moves to the separate CPU-only build and stays on the CPU for the rest of the visit.
+- The page needs `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` on every response, or WebAssembly runs on one thread. The service sends them, with `Cache-Control: no-cache` so a browser checks for a newer `models.json` instead of mixing an old model list with rebuilt files, and `pages.py` writes a `_headers` file that makes Cloudflare send them.
+- The site is a Worker with static assets only, which is what Cloudflare Pages has become: wrangler 4.135 turns `wrangler pages project create` into a Workers deploy. The custom domain overrides the `*.lefthanddev.com` wildcard for `leaf` only. Uploading this build's 2.1 GB took 4 minutes from the laptop; a few requests fail with Cloudflare's code -1 and go through on wrangler's retries.
+- Right after a deploy, Cloudflare answered one BioCLIP 2 part with a 500 twice, then served it. The page tries a request that meets a network error or a 5xx twice more, a second apart.
+- Cloudflare serves files up to 25 MiB, so the weights of BioCLIP 1, 2 and 2.5 and the 27 MB WebGPU runtime come in 24 MiB parts, which the page downloads and joins. The browser keeps each part as its own entry: Chrome refused to keep 610 MB as one (500 MB went in), and an interrupted download resumes from the last whole part.
+- `models.json` carries a version, a hash of every file in the build. The page names its cache after it, so after a build with other models or species a returning visitor downloads them again and the page deletes the old copies.
+- Cloudflare Web Analytics is on for lefthanddev.com, so Cloudflare adds its beacon (`static.cloudflareinsights.com`) to the page. It reports page loads, not photos. To keep the page free of third-party requests, turn it off for this hostname in the Web Analytics settings.
 - With tracking prevention on, Safari deletes a site's stored data after 7 days without an interaction, so occasional iPhone users would download the model again.
+
+Memory at its peak while a model starts, in the same Chrome: the page's process, and on the GPU path the GPU buffers, which on a phone come out of the same memory. The second row is the earlier build, with the weights inside the model file:
+
+| Model | GPU path: page + GPU buffers | CPU path: page |
+|---|---|---|
+| BioCLIP 2.5 Mobile | 0.6 + 0.1 GB | 0.5 GB |
+| BioCLIP 2, weights inside the model file | 3.1 + 1.3 GB | 3.7 GB |
+| BioCLIP 2 | 1.4 + 1.3 GB | 2.7 GB |
+| BioCLIP 2.5 | 2.3 + 2.7 GB | 5.1 GB |
+
+### Why BioCLIP 2 broke on an iPhone
+
+An iPhone with iOS 26.6.2 and Chrome 154 for iOS, which runs on Apple's WebKit like every iPhone browser, loaded Mobile and then BioCLIP 2 on the GPU. Cloudflare's request log shows it downloaded all 25 parts of BioCLIP 2, then reloaded the page again and again for five minutes without asking for another model file, with both the GPU and the CPU runtime. That is what iOS does when it closes a page for using too much memory: WebKit reloads it once and then shows "A problem repeatedly occurred" ([WebKit bug 279637](https://bugs.webkit.org/show_bug.cgi?id=279637)). That build needed 4.4 GB to start BioCLIP 2 on the GPU and 3.7 GB on the CPU (the table above).
+
+With the weights in a file of their own, which ONNX Runtime Web takes as external data, the same start needs 2.7 GB either way. Whether that fits depends on the phone: iOS doesn't publish how much memory one page may use, so the answer is to try it. BioCLIP 2.5 needs about 5 GB, so it is left to computers. If a model still closes the page as it starts, the page remembers it for that tab, and after the reload it says so and starts nothing, instead of starting the model again.
 
 ## Put it on the network
 
@@ -248,6 +272,7 @@ curl -F file=@poppy.jpg -F top_k=1 http://localhost:8000/api/identify
 - `GET /api/backends`: each model `BACKENDS` offers, whether it's ready, and why not if it isn't
 - `POST /api/load?backend=<id>`: load a model before the first photo (the page calls it when it opens); `load_ms` is `null` if it was already loaded
 - `POST /api/identify`: `file` (required), `backend` (defaults to the first ready model), `top_k` (1 to 20, default 5)
+- `GET /models/...`: the on-device models and ONNX Runtime Web from `models/browser`, when a build is there
 
 The first request to each model loads it and is slow; `cold_start` and `load_ms` tell you when that happened. Photos over `MAX_UPLOAD_MB` (default 15) are rejected. Scores are softmax probabilities within each model's own label set, not calibrated odds of being right. `common_name` comes from `models/common_names.json` and is `null` when there isn't one.
 
@@ -273,9 +298,9 @@ app/main.py              API routes and static UI
 app/backends/            one file per model; registry loads them lazily
 app/labels.py            label mapping and checkpoint parsing (pure Python)
 app/common_names.py      common-name table and the script that builds it
-app/static/index.html    the test page, no external requests
+app/static/index.html    the page: the server's models and the on-device ones, no external requests
 tests/                   pytest suite; the backend tests skip without PyTorch
-web/                     browser test page: build.py, serve.py, index.html
+web/                     build.py (the on-device models) and pages.py (the static site)
 ```
 
 To add a model, subclass `Backend` in `app/backends/`, implement `is_available`, `load` and `_predict`, and add it to `_CLASSES` in `app/backends/__init__.py`.
@@ -289,8 +314,10 @@ Tested on a Ryzen AI 9 HX 370 laptop with Fedora 44:
 - The page in Chromium, driven with Playwright: one model and compare mode with all five models, light and dark mode at 1280 and 390 pixels wide, and a 1.7 MB phone photo, which the page shrank to 0.3 MB before upload and kept upright. No console errors, and no requests to anything but the server itself.
 - The loading bar and photo scan with BioCLIP 2.5 alone. In the CPU container the bar filled from empty to 73% during an 8.5-second load, then completed and faded without moving anything below it; a failed load (simulated with an error reply) leaves it full and red, with the message under it. The scan covers only the photo for landscape and portrait shots and stops sweeping when the browser asks for reduced motion; the bar still fills then, since it shows progress. With two models offered, the picker, compare mode and model headings still appear.
 - `pytest`: the API, label and checkpoint parsing, the PlantNet-300K and iNat21 load and predict code on small random-weight models, and the BioCLIP 2.5 Mobile scoring on a stand-in ONNX model (the model tests skip without PyTorch or onnxruntime). Run it with `pip install -r requirements-dev.txt && pytest`.
-- The browser test page in Chrome 154, driven with Playwright: all three models on the CPU and on the GPU, first download and reload from the browser's cache, and 390 pixels wide in dark mode. No console errors, and no requests to anything but the page's own server.
+- The browser test page that came before, in Chrome 154: all three models on the CPU and on the GPU, first download and reload from the browser's cache (the 16-photo table above).
+- The on-device models in the page, in Chrome for Testing 153 driven with Playwright, at :8000 next to the server's models and as the static site served locally: BioCLIP 2 and 2.5 on the GPU and on the CPU, Mobile, BioCLIP 1 on the CPU after a simulated GPU failure, compare mode with an on-device model, a reload that took every model file from the cache, an emulated Pixel 7, a server that failed each of two model files once with a 500, and a leftover "starting" mark, after which the page explained itself and started nothing. The memory figures come from these runs: peak resident memory of the page's process, and the GPU memory the amdgpu driver reports for Chrome's GPU process. No console errors apart from those test 500s.
+- The live site, through the Worker's workers.dev address because the network in use at the time blocked lefthanddev.com: an emulated Pixel 7 (Mobile on the CPU) and a desktop (BioCLIP 2 on the GPU), each followed by a reload from the cache. That run met the 500s above.
 
-**Not tested yet:** the "Take photo" button (it only shows on touch screens), drag-and-drop or paste, Docker with its SELinux support turned on, and the browser test page on a phone, in Safari or Firefox, over a real connection, or its memory use.
+**Not tested yet:** taking a photo with "Take photo" (the button shows on an emulated touch screen), drag-and-drop or paste, Docker with its SELinux support turned on, and the on-device models on a real phone since the fix, in Safari or Firefox, or on Android. A page really closed for lack of memory wasn't reproduced; only the mark it leaves behind was, and whether iOS keeps that mark across its reload is untested.
 
 Identification from a photo is a lead, not a verdict. Don't eat or handle a plant based on this alone.
