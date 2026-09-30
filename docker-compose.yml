@@ -6,7 +6,8 @@ x-common: &common
   volumes: ["./models:/models:z"]
   restart: unless-stopped
   environment:
-    # These three come from your shell or a .env file beside this one, e.g. DEFAULT_BACKEND=bioclip2
+    # These come from your shell or a .env file beside this one, e.g. BACKENDS=bioclip,inat21
+    BACKENDS: ${BACKENDS:-}                 # models the page offers; empty = bioclip (BioCLIP 2.5)
     DEVICE: ${DEVICE:-auto}                 # auto, cpu, or cuda (ROCm also uses cuda)
     DEFAULT_BACKEND: ${DEFAULT_BACKEND:-}   # model preselected in the page; empty = first ready one
     ENABLE_MOCK: ${ENABLE_MOCK:-0}          # 1 = placeholder model for UI testing

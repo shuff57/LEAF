@@ -11,6 +11,8 @@ A small self-hosted plant identification service: a FastAPI backend with swappab
 | `inat21-convnext` | ConvNeXt Large fine-tuned on iNaturalist 2021 (same species) | The same, lighter and faster |
 | `mock` | Placeholder results, no model | Testing the API and UI |
 
+The service offers only `bioclip` (BioCLIP 2.5) unless `BACKENDS` names others, for example `BACKENDS=bioclip,inat21-convnext`; `ENABLE_MOCK=1` adds `mock`.
+
 ## Quick start (no model files needed)
 
 ```bash
@@ -54,12 +56,12 @@ The 1,081 species were picked for the dataset, not for being common: dandelion, 
 
 ### BioCLIP
 
-The page offers two BioCLIP checkpoints that share one species list:
+Two BioCLIP checkpoints share one species list:
 
-- `bioclip`: BioCLIP 2.5 Huge by default, `hf-hub:imageomics/bioclip-2.5-vith14` (ViT-H/14, 3.9 GB download, about 7.7 GiB of RAM). `BIOCLIP_MODEL` swaps in another open_clip checkpoint, for example `hf-hub:imageomics/bioclip` (the first BioCLIP: ViT-B/16, 1.5 GiB, about 0.2 s per photo on CPU).
+- `bioclip`: BioCLIP 2.5 Huge by default, `hf-hub:imageomics/bioclip-2.5-vith14`: a ViT-H/14 image encoder and a 24-layer text encoder, 986 million parameters. open_clip downloads only its `open_clip_model.safetensors`, 3.94 GB (3.7 GiB in `models/hf`), and the label cache for 5,035 names adds 21 MB. It takes about 7.7 GiB of RAM on the CPU, or 3.9 GiB of GTT on the Radeon 890M, and loads in about 10 seconds once its label cache exists. `BIOCLIP_MODEL` swaps in another open_clip checkpoint, for example `hf-hub:imageomics/bioclip` (the first BioCLIP: ViT-B/16, 1.5 GiB, about 0.2 s per photo on CPU).
 - `bioclip2`: BioCLIP 2, `hf-hub:imageomics/bioclip-2` (ViT-L/14, 1.7 GB download, about 3.6 GiB of RAM, about twice as fast as 2.5).
 
-Both download from Hugging Face on first use into `models/hf` (needs internet once; afterwards they run offline). The page names the checkpoint in use.
+Both download from Hugging Face on first use into `models/hf` (needs internet once; afterwards they run offline). When the page offers more than one model, it names the checkpoint each answer came from.
 
 BioCLIP only returns species that are on its list, `models/bioclip/labels.txt`, one scientific name per line (`labels.example.txt` shows the format). Without that file it uses the 1,019 PlantNet-300K species (author citations removed, duplicates merged). None of the six California and garden plants in the comparison below is on that list, so no BioCLIP could name them. Adding the 4,271 iNaturalist 2021 plant species from `models/inat21/config.json` (next section) gives 5,035 names, and BioCLIP 2 and 2.5 then named all six. Run this from this directory to write that list (PlantNet names only if the iNat21 config is absent), then append your own species at the end:
 
@@ -136,7 +138,7 @@ docker compose --profile rocm up --build -d   # AMD GPU (Radeon 890M etc.)
 
 Docker and Podman run the same file, tested with Docker Engine 29.8 (Compose 5.5) and Podman 5.8 (podman-compose 1.6). With Podman, use `podman-compose` in place of `docker compose`. `podman compose`, with a space, hands off to Docker's compose plugin when that is installed, and then fails with `failed to connect to the docker API at unix:///run/user/1000/podman/podman.sock` because Podman's API socket is not running; `PODMAN_COMPOSE_PROVIDER=podman-compose podman compose ...` makes it use podman-compose instead. The ROCm image is large: a 10 GB download that takes 30 GB on disk under Podman and 40 GB under Docker, which keeps the download as well.
 
-The page shows which device is in use and which models are ready. A model that isn't ready says what's missing. To preselect the model that did best in the comparison above, set `DEFAULT_BACKEND=bioclip2` (see Environment variables).
+When the page opens it loads the model, with a bar under the title until it is ready (about 10 seconds for BioCLIP 2.5 on the CPU), so the first photo doesn't wait for it. A photo shows a scan while it is being identified. With one model offered the page shows no model picker and no model names; with several it shows the picker, a compare option and a heading per model, and a model that isn't ready says what's missing. The page doesn't show the device; `GET /api/health` reports it. To offer the model that did best in the comparison above instead, set `BACKENDS=bioclip2`.
 
 ### AMD GPU notes
 
@@ -147,7 +149,7 @@ docker compose --profile rocm exec plant-id-rocm \
   python -c "import torch; print(torch.cuda.is_available(), torch.version.hip)"
 ```
 
-It should print `True 7.2.53211`, and the page should say it is running on `ROCm GPU (AMD Radeon 890M Graphics)`.
+It should print `True 7.2.53211`, and `curl localhost:8000/api/health` should report `ROCm GPU (AMD Radeon 890M Graphics)`.
 
 - `Memory critical error by agent node-0 ... Reason: Memory in use.` followed by a core dump: SELinux stopped the container from mapping `/dev/kfd`. The compose file sets `label=disable` for the ROCm service; `--privileged` also works. The host-wide alternative, `sudo setsebool -P container_use_devices true`, was not tested here. This came up only under Podman: Docker Engine leaves its SELinux support off unless you enable it, and its containers ran unconfined (`spc_t`).
 - `Unable to find group render`: the image has no `render` group, so the compose file adds only `video`. On the Fedora 44 test host `/dev/kfd` and `/dev/dri/renderD128` are open to every user anyway; on other hosts check that they exist and that the container can open them.
@@ -175,24 +177,25 @@ Or publish it through a Cloudflare tunnel and protect it with Cloudflare Access.
 Interactive docs at `/api/docs`.
 
 ```bash
-curl -F file=@poppy.jpg -F backend=plantnet300k -F top_k=5 http://localhost:8000/api/identify
+curl -F file=@poppy.jpg -F top_k=1 http://localhost:8000/api/identify
 ```
 
 ```json
 {
-  "backend": "plantnet300k",
-  "label": "PlantNet-300K ResNet",
-  "device": "cuda",
-  "latency_ms": 41.2,
+  "backend": "bioclip",
+  "label": "BioCLIP (bioclip-2.5-vith14)",
+  "device": "cpu",
+  "latency_ms": 838.8,
   "load_ms": null,
   "cold_start": false,
-  "image": {"width": 1536, "height": 1152},
-  "predictions": [{"name": "Papaver rhoeas L.", "common_name": "Common poppy", "score": 0.97}]
+  "image": {"width": 1280, "height": 960},
+  "predictions": [{"name": "Eschscholzia californica", "common_name": "Californian poppy", "score": 0.999803}]
 }
 ```
 
 - `GET /api/health`: status, device, how many models are ready
-- `GET /api/backends`: each model, whether it's ready, and why not if it isn't
+- `GET /api/backends`: each model `BACKENDS` offers, whether it's ready, and why not if it isn't
+- `POST /api/load?backend=<id>`: load a model before the first photo (the page calls it when it opens); `load_ms` is `null` if it was already loaded
 - `POST /api/identify`: `file` (required), `backend` (defaults to the first ready model), `top_k` (1 to 20, default 5)
 
 The first request to each model loads it and is slow; `cold_start` and `load_ms` tell you when that happened. Photos over `MAX_UPLOAD_MB` (default 15) are rejected. Scores are softmax probabilities within each model's own label set, not calibrated odds of being right. `common_name` comes from `models/common_names.json` and is `null` when there isn't one.
@@ -204,12 +207,13 @@ The first request to each model loads it and is slow; `cold_start` and `load_ms`
 | `MODELS_DIR` | `/models` | Root for weights, labels, caches |
 | `DEVICE` | `auto` | `auto`, `cpu`, or `cuda` (ROCm also uses `cuda`) |
 | `DEFAULT_BACKEND` | first ready | Pre-selected model in the UI |
+| `BACKENDS` | `bioclip` | Models the page and API offer, comma-separated; an unknown id shows up as not ready |
 | `MAX_UPLOAD_MB` | `15` | Upload size limit |
 | `ENABLE_MOCK` | off | Show the placeholder model |
 | `PLANTNET_*` | see above | Weights, species files, architecture, pickle opt-in |
 | `BIOCLIP_MODEL`, `BIOCLIP_LABELS` | see above | Hub id and label list |
 
-`docker-compose.yml` takes `DEVICE`, `DEFAULT_BACKEND` and `ENABLE_MOCK` from your shell or from a `.env` file beside it, for example `DEFAULT_BACKEND=bioclip2 docker compose --profile rocm up -d`. Add any other variable under `environment:` in that file.
+`docker-compose.yml` takes `BACKENDS`, `DEVICE`, `DEFAULT_BACKEND` and `ENABLE_MOCK` from your shell or from a `.env` file beside it, for example `BACKENDS=bioclip,bioclip2 docker compose --profile rocm up -d`. Add any other variable under `environment:` in that file.
 
 ## Layout
 
@@ -231,6 +235,7 @@ Tested on a Ryzen AI 9 HX 370 laptop with Fedora 44:
 - Every model against its real weights (the comparison above), and the BioCLIP label cache across restarts.
 - Both images under Podman (`podman-compose`) and under Docker Engine (`docker compose`): the CPU image, and the ROCm image on the Radeon 890M, where all five models ran on the GPU and named the same plants as on the CPU. Docker runs the container as root, so anything it writes into `models/` (a new BioCLIP label cache, a first download) will belong to root; in these runs everything was already there and it wrote nothing.
 - The page in Chromium, driven with Playwright: one model and compare mode with all five models, light and dark mode at 1280 and 390 pixels wide, and a 1.7 MB phone photo, which the page shrank to 0.3 MB before upload and kept upright. No console errors, and no requests to anything but the server itself.
+- The loading bar and photo scan with BioCLIP 2.5 alone: nothing below the bar moves when it fades, the scan covers only the photo for landscape and portrait shots, and it stops sweeping when the browser asks for reduced motion. With two models offered, the picker, compare mode and model headings still appear.
 - `pytest`: the API, label and checkpoint parsing, and the PlantNet-300K and iNat21 load and predict code on small random-weight models (skipped without PyTorch). Run it with `pip install -r requirements-dev.txt && pytest`.
 
 **Not tested yet:** the "Take photo" button (it only shows on touch screens), drag-and-drop or paste, and Docker with its SELinux support turned on.

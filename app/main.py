@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from . import backends, common_names
-from .backends import BackendUnavailable
+from .backends import Backend, BackendUnavailable
 from .config import get_settings
 from .device import describe_runtime
 from .labels import scientific_name
@@ -57,6 +57,40 @@ def _decode(data: bytes) -> Image.Image:
     return img
 
 
+def _ready(backend: str | None) -> tuple[Backend, float | None]:
+    """Load `backend` (default: the first ready model), or raise the HTTP error that says why not."""
+    if not backend:
+        backend = next((b["id"] for b in backends.list_backends() if b["available"]), None)
+        if backend is None:
+            raise HTTPException(
+                status_code=503,
+                detail="No models are ready. Check the model files described in the README.",
+            )
+    try:
+        return backends.get_ready(backend)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {backend}") from None
+    except BackendUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except Exception:
+        log.exception("Failed to load %s", backend)
+        raise HTTPException(
+            status_code=500, detail=f"{backend} failed to load. See the server log."
+        ) from None
+
+
+@app.post("/api/load")
+def load_model(backend: str | None = None) -> dict:
+    """Load a model before the first photo arrives; the page calls this when it opens."""
+    model, load_ms = _ready(backend)
+    return {
+        "backend": model.id,
+        "label": model.label,
+        "device": model.device,
+        "load_ms": None if load_ms is None else round(load_ms, 1),
+    }
+
+
 @app.post("/api/identify")
 def identify(
     file: UploadFile = File(...),
@@ -75,25 +109,7 @@ def identify(
     image = _decode(data)
     top_k = max(1, min(int(top_k), 20))
 
-    if not backend:
-        backend = next((b["id"] for b in backends.list_backends() if b["available"]), None)
-        if backend is None:
-            raise HTTPException(
-                status_code=503,
-                detail="No models are ready. Check the model files described in the README.",
-            )
-
-    try:
-        model, load_ms = backends.get_ready(backend)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"Unknown model: {backend}") from None
-    except BackendUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from None
-    except Exception:
-        log.exception("Failed to load %s", backend)
-        raise HTTPException(
-            status_code=500, detail=f"{backend} failed to load. See the server log."
-        ) from None
+    model, load_ms = _ready(backend)
 
     try:
         t0 = time.perf_counter()

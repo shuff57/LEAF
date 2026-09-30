@@ -24,6 +24,7 @@ class Settings:
     max_upload_bytes: int
     enable_mock: bool
     default_backend: str | None
+    backends: tuple[str, ...]  # model ids the service offers (BACKENDS); ENABLE_MOCK adds the mock
 
     # PlantNet-300K ResNet
     plantnet_weights: Path
@@ -46,6 +47,9 @@ class Settings:
             max_upload_bytes=int(float(os.environ.get("MAX_UPLOAD_MB", "15")) * 1024 * 1024),
             enable_mock=_flag("ENABLE_MOCK"),
             default_backend=os.environ.get("DEFAULT_BACKEND") or None,
+            backends=tuple(
+                b.strip() for b in (os.environ.get("BACKENDS") or "bioclip").split(",") if b.strip()
+            ),
             plantnet_weights=Path(
                 os.environ.get("PLANTNET_WEIGHTS", pn_dir / "resnet18_weights_best_acc.tar")
             ),

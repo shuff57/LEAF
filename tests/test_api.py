@@ -119,3 +119,28 @@ def test_serves_ui(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "Identify a plant" in r.text
+
+
+def test_only_bioclip_by_default(client, monkeypatch, jpeg_bytes):
+    monkeypatch.delenv("BACKENDS")  # the client fixture offers every model
+    ids = [b["id"] for b in client.get("/api/backends").json()["backends"]]
+    assert ids == ["bioclip", "mock"]
+    r = client.post(
+        "/api/identify",
+        files={"file": ("p.jpg", jpeg_bytes(), "image/jpeg")},
+        data={"backend": "inat21"},
+    )
+    assert r.status_code == 404  # not offered
+
+    monkeypatch.setenv("BACKENDS", "bioclip,bioclip3")
+    typo = client.get("/api/backends").json()["backends"][-1]
+    assert typo["id"] == "bioclip3"
+    assert typo["available"] is False
+
+
+def test_load_before_the_first_photo(client):
+    first = client.post("/api/load", params={"backend": "mock"}).json()
+    assert first["backend"] == "mock"
+    assert first["load_ms"] is not None
+    assert client.post("/api/load", params={"backend": "mock"}).json()["load_ms"] is None
+    assert client.post("/api/load", params={"backend": "nope"}).status_code == 404

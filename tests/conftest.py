@@ -13,6 +13,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("MODELS_DIR", str(tmp_path))
     monkeypatch.setenv("ENABLE_MOCK", "1")
     monkeypatch.setenv("DEVICE", "cpu")
+    # Offer every model; test_only_bioclip_by_default covers the default.
+    monkeypatch.setenv("BACKENDS", "plantnet300k,bioclip,bioclip2,inat21,inat21-convnext")
     from fastapi.testclient import TestClient
 
     from app import backends

@@ -39,13 +39,21 @@
     font: 16px/1.5 var(--sans);
   }
   .wrap { max-width: 1080px; margin: 0 auto; padding: clamp(16px, 4vw, 40px); }
-  .masthead { margin-bottom: 28px; }
+  .masthead { margin-bottom: 18px; }
   h1 {
-    margin: 0 0 6px;
+    margin: 0;
     font: 600 clamp(1.9rem, 4vw, 2.6rem)/1.1 var(--serif);
     letter-spacing: -0.01em;
   }
-  .status { margin: 0; color: var(--ink-soft); font-size: 0.95rem; }
+  /* Model loading bar. It keeps its space when it fades out, so nothing below it moves. */
+  .load { height: 4px; margin: 14px 0 6px; overflow: hidden; border-radius: 2px; background: var(--line); opacity: 0; transition: opacity 0.6s 0.3s; }
+  .load span { display: block; height: 100%; border-radius: inherit; background: var(--moss); }
+  .load[data-state="loading"], .load[data-state="error"] { opacity: 1; transition: none; }
+  .load[data-state="loading"] span { width: 35%; animation: slide 1.3s ease-in-out infinite; }
+  .load[data-state="error"] span { background: var(--warn); }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+  .status { min-height: 1.5em; margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
+  .load[data-state="error"] + .status { color: var(--warn); }
 
   .bench {
     display: grid;
@@ -61,6 +69,7 @@
     --len: 24px;
     --w: 2px;
     position: relative;
+    container-type: size;  /* the photo sizes itself to this box with cqw/cqh */
     display: grid;
     place-items: center;
     aspect-ratio: 4 / 3;
@@ -82,9 +91,28 @@
   }
   .frame.dragging { --c: var(--moss); --w: 4px; }
   .frame:focus-visible { outline: 2px solid var(--moss); outline-offset: 4px; }
-  .frame img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
   .frame .prompt { max-width: 26ch; margin: 0; text-align: center; color: var(--ink-soft); }
-  .frame[hidden], .prompt[hidden], .frame img[hidden] { display: none; }
+  .frame[hidden], .prompt[hidden], .shot[hidden], .options label[hidden] { display: none; }
+
+  /* The photo, and a scan that sweeps over it while it is being identified */
+  .shot { --scan: 138 185 106; position: relative; overflow: hidden; }
+  .shot img { display: block; max-width: 100cqw; max-height: 100cqh; }
+  .shot::before, .shot::after { content: ""; position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+  .shot::before {
+    background:
+      repeating-linear-gradient(90deg, rgb(var(--scan) / 0.3) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(rgb(var(--scan) / 0.3) 0 1px, transparent 1px 28px),
+      rgb(0 0 0 / 0.2);
+  }
+  .shot::after {
+    bottom: auto;
+    height: 30%;
+    background: linear-gradient(transparent, rgb(var(--scan) / 0.5) 42%, rgb(235 255 220) 49% 51%, rgb(var(--scan) / 0.5) 58%, transparent);
+  }
+  .frame.scanning { --c: var(--moss); cursor: progress; }
+  .scanning .shot::before, .scanning .shot::after { opacity: 1; }
+  .scanning .shot::after { animation: sweep 1.6s ease-in-out infinite alternate; }
+  @keyframes sweep { from { transform: translateY(-50%); } to { transform: translateY(283%); } }
 
   .pick { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
   .btn {
@@ -118,6 +146,7 @@
   .model .desc { grid-column: 2; color: var(--ink-soft); font-size: 0.9rem; }
   .model.off { opacity: 0.6; cursor: not-allowed; }
   .options { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; margin: 8px 0 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+  fieldset[hidden] + .options { margin-top: 20px; }
   .options label { display: inline-flex; gap: 8px; align-items: center; }
   .options input[type="checkbox"] { accent-color: var(--moss); }
   select { font: inherit; padding: 0.25rem 0.4rem; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
@@ -126,7 +155,7 @@
   .empty { margin: 0; max-width: 34ch; color: var(--ink-soft); }
   .run { padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
   .run:last-child { border-bottom: 0; margin-bottom: 0; }
-  .run h2 { margin: 0; font-size: 1rem; }
+  .run h2 { margin: 0 0 4px; font-size: 1rem; }
   .meta { margin: 2px 0 12px; color: var(--ink-soft); font-size: 0.9rem; }
   .matches { list-style: none; margin: 0; padding: 0; }
   .match { padding: 9px 0; }
@@ -145,21 +174,26 @@
   .note { margin: 20px 0 0; font-size: 0.85rem; color: var(--ink-soft); max-width: 60ch; }
   footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--ink-soft); max-width: 70ch; }
 
-  @media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .bar span { transition: none; }
+    .load[data-state="loading"] span { width: 100%; opacity: 0.5; animation: none; }
+    .scanning .shot::after { opacity: 0; animation: none; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="masthead">
     <h1>Identify a plant</h1>
-    <p class="status" id="status" aria-live="polite">Checking the server…</p>
+    <div class="load" id="load" aria-hidden="true"><span></span></div>
+    <p class="status" id="status" aria-live="polite"></p>
   </header>
 
   <main class="bench">
     <section aria-label="Photo and model">
       <div class="frame" id="frame" role="button" tabindex="0" aria-label="Choose a photo">
         <p class="prompt" id="prompt">Drop a photo here, paste one, or choose a file.</p>
-        <img id="preview" alt="Selected plant photo" hidden>
+        <div class="shot" id="shot" hidden><img id="preview" alt="Selected plant photo"></div>
       </div>
       <div class="pick">
         <button class="btn" type="button" id="choose">Choose photo</button>
@@ -221,15 +255,33 @@ async function api(path, options) {
 
 async function loadMeta() {
   try {
-    const [health, list] = await Promise.all([api("api/health"), api("api/backends")]);
+    const list = await api("api/backends");
     state.backends = list.backends;
-    $("#status").textContent =
-      `Running on ${health.runtime.device_label}. ${health.models_ready} of ${health.models_total} models ready.`;
     renderModels(list.default);
+    preload();
   } catch (err) {
-    $("#status").textContent = `Cannot reach the server: ${err.message}`;
+    showLoad("error", `Cannot reach the server: ${err.message}`);
   }
   updateGo();
+}
+
+function showLoad(step, text = "") {
+  $("#load").dataset.state = step;
+  $("#status").textContent = text;
+}
+
+/* Load the preselected model as soon as the page opens, so the first photo doesn't wait for it. */
+async function preload() {
+  const info = state.backends.find((b) => b.id === selectedId());
+  if (!info || info.loaded) return;
+  showLoad("loading", "Loading the model…");
+  try {
+    await api(`api/load?backend=${encodeURIComponent(info.id)}`, { method: "POST" });
+    info.loaded = true;
+    showLoad("done");
+  } catch (err) {
+    showLoad("error", `The model did not load. ${err.message}`);
+  }
 }
 
 function renderModels(defaultId) {
@@ -248,6 +300,11 @@ function renderModels(defaultId) {
   if (!state.backends.some((b) => b.available)) {
     box.append(el("p", { class: "note", text: "No models are ready yet. The README explains which files to add." }));
   }
+  const few = readyIds().length < 2;  // comparing needs at least two ready models
+  $("#compare").closest("label").hidden = few;
+  if (few) $("#compare").checked = false;
+  // A single model that is ready leaves nothing to choose, so the picker goes.
+  box.hidden = state.backends.length === 1 && state.backends[0].available;
 }
 
 const selectedId = () => { const r = document.querySelector('input[name="backend"]:checked'); return r && r.value; };
@@ -266,7 +323,7 @@ function setFile(file) {
   state.file = file;
   state.previewUrl = URL.createObjectURL(file);
   $("#preview").src = state.previewUrl;
-  $("#preview").hidden = false;
+  $("#shot").hidden = false;
   $("#prompt").hidden = true;
   $("#results").replaceChildren(el("p", { class: "empty", text: "Photo ready. Choose Identify." }));
   updateGo();
@@ -318,17 +375,21 @@ async function identify() {
 
   state.busy = true;
   updateGo();
+  frame.classList.add("scanning");
   const results = $("#results");
   results.replaceChildren();
   const upload = await prepareUpload(state.file);
   const topK = $("#topk").value;
+  const named = state.backends.length > 1;  // say which model answered only when there is a choice
 
   for (const id of ids) {
     const info = state.backends.find((b) => b.id === id);
-    const first = info && !info.loaded;
-    const pending = el("section", { class: "run" },
-      el("h2", { text: info ? info.label : id }),
-      el("p", { class: "meta", text: first ? "Loading the model for the first time. This can take a minute." : "Working…" }));
+    const label = info ? info.label : id;
+    const pending = el("section", { class: "run" });
+    if (named) pending.append(el("h2", { text: label }));
+    if (named && info && !info.loaded) {
+      pending.append(el("p", { class: "meta", text: "Loading this model first. It can take a minute." }));
+    }
     results.append(pending);
 
     const form = new FormData();
@@ -338,11 +399,12 @@ async function identify() {
     try {
       const data = await api("api/identify", { method: "POST", body: form });
       if (info) info.loaded = true;
-      pending.replaceWith(renderRun(data));
+      pending.replaceWith(renderRun(data, named));
     } catch (err) {
-      pending.replaceWith(renderError(info ? info.label : id, err.message));
+      pending.replaceWith(renderError(named ? label : "", err.message));
     }
   }
+  frame.classList.remove("scanning");
   state.busy = false;
   updateGo();
 }
@@ -352,9 +414,7 @@ function percent(score) {
   return p < 0.1 ? "under 0.1%" : `${p.toFixed(p < 10 ? 1 : 0)}%`;
 }
 
-function renderRun(data) {
-  const meta = `${Math.round(data.latency_ms)} ms on ${data.device}.` +
-    (data.cold_start ? ` Includes ${(data.load_ms / 1000).toFixed(1)} s to load the model.` : "");
+function renderRun(data, named) {
   const list = el("ol", { class: "matches" });
   data.predictions.forEach((p, i) => {
     const bar = el("span");
@@ -371,13 +431,15 @@ function renderRun(data) {
     );
     requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = `${Math.max(1, Math.round(p.score * 1000) / 10)}%`; }));
   });
-  return el("section", { class: "run" }, el("h2", { text: data.label }), el("p", { class: "meta", text: meta }), list);
+  const run = el("section", { class: "run" }, list);
+  if (named) run.prepend(el("h2", { text: data.label }));
+  return run;
 }
 
 function renderError(label, message) {
-  return el("section", { class: "run" },
-    el("h2", { text: label }),
-    el("div", { class: "error", role: "alert" }, el("p", { text: message })));
+  const run = el("section", { class: "run" }, el("div", { class: "error", role: "alert" }, el("p", { text: message })));
+  if (label) run.prepend(el("h2", { text: label }));
+  return run;
 }
 
 $("#go").addEventListener("click", identify);
