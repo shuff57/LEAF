@@ -179,6 +179,35 @@ It should print `True 7.2.53211`, and `curl localhost:8000/api/health` should re
 - An iGPU keeps the weights in GTT, system memory it borrows: about 8 GiB with all five models loaded, plus 2.8 GB of ordinary RAM for the container.
 - This iGPU is slow at fp32, the precision the models run in: a 4096×4096 matrix multiply reached 0.1 TFLOPS in fp32 and 1.6 TFLOPS in fp16. Under fp16 autocast, BioCLIP 2's image encoder took 111 ms instead of 480 and EVA-02 336 ms instead of 1,469, with outputs matching the CPU's (cosine similarity 1.00000). The service does not use fp16 yet. `TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1` gave mixed results in one run (BioCLIP 2 faster in fp16, EVA-02 slower in both precisions and three times slower in fp32), so it is not set.
 
+## Running the model in the browser (test page)
+
+`web/` is a separate static test page that runs BioCLIP 2.5 Mobile, BioCLIP 1 or BioCLIP 2 inside the browser with [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) 1.30: on the GPU through WebGPU, or on the CPU through WebAssembly. Photos never leave the device, and the browser keeps each model after its first download. It uses the service's species list and common names. BioCLIP 2.5 itself is not built for it: 1.26 GB even in fp16.
+
+```bash
+pip install onnx onnxscript     # for build.py only; onnxruntime is in requirements.txt
+.venv/bin/python web/build.py   # writes models/browser/: fp16 ONNX models, label tables, ONNX Runtime Web
+python3 web/serve.py            # http://127.0.0.1:8002
+```
+
+`build.py` exports the BioCLIP 1 and 2 image encoders to fp16 ONNX with the colour normalisation inside the graph (on the 16 test photos their embeddings matched PyTorch's with a cosine similarity of 0.99999 or better), copies the Mobile model, and writes each model's label table as fp16. It reads the label tables from `models/bioclip/cache`, so run each model on the service once first; it says which one is missing.
+
+Chrome 154 on the Ryzen AI 9 HX 370 laptop, the same 16 photos:
+
+| Model | Download: model + label table | Top-1, of 16 | Same top-1 as the service | CPU, WebAssembly, 4 threads | GPU, WebGPU, Radeon 890M |
+|---|---|---|---|---|---|
+| BioCLIP 2.5 Mobile | 24 + 10 MB | 12 | 15 | 0.15 s | 0.05 s |
+| BioCLIP 1 | 173 + 5 MB | 16 | 15 | 0.90 s | 0.08 s |
+| BioCLIP 2 | 610 + 8 MB | 16 | 16 | 2.1 s | 0.15 s |
+
+- Times are medians per photo, including preparing the photo and scoring the 5,035 names. ONNX Runtime Web adds 14 MB for the CPU path or 27 MB for the GPU path.
+- From the browser's cache a model was ready in 0.4 s (Mobile), 0.6 s (BioCLIP 1) and 1.5 s (BioCLIP 2) on the GPU, and 0.6, 2.7 and 6.0 s on the CPU. The test downloads came from this machine; over a real connection the download dominates the first visit: 610 MB takes about 100 seconds at 50 Mbps.
+- In fp16 on the GPU, BioCLIP 2 answered faster in the browser (0.15 s) than the service does on the same laptop (0.42 s on its CPU, 0.48 s on its GPU in fp32).
+- The one disagreement with the service is the coast live oak, a near-tie for the smaller models, and the page shrinks photos with the browser's canvas rather than PIL. In the browser the Mobile model called it an olive tree, while BioCLIP 1 named it correctly there and not on the service.
+- WebGPU on Linux with AMD graphics is off by default. Chrome offered the Radeon only when launched with `--enable-unsafe-webgpu --use-angle=vulkan --enable-features=Vulkan` (and `--disable-vulkan-surface` headless); otherwise use the CPU path. Windows, macOS, ChromeOS, most Android 12+ phones and Safari 26 have it on by default ([WebGPU implementation status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)).
+- The page needs `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` on every response, or WebAssembly runs on one thread. `serve.py` sends them; on Cloudflare Pages a `_headers` file would.
+- Cloudflare Pages takes files up to 25 MiB: the Mobile model, its table and the CPU runtime fit, while BioCLIP 1 and 2 and the 27 MB WebGPU runtime would go on R2 or another host.
+- With tracking prevention on, Safari deletes a site's stored data after 7 days without an interaction, so occasional iPhone users would download the model again.
+
 ## Put it on the network
 
 There is no login. Anyone who can reach the port can upload images and use your CPU/GPU, so put it behind something. The compose file publishes port 8000 on every network interface; on Fedora Workstation, whose default firewall zone opens ports 1025 to 65535, other machines on your network can reach it. If only a proxy on the same machine should, change the port line to `"127.0.0.1:8000:8000"`. With Caddy:
@@ -246,6 +275,7 @@ app/labels.py            label mapping and checkpoint parsing (pure Python)
 app/common_names.py      common-name table and the script that builds it
 app/static/index.html    the test page, no external requests
 tests/                   pytest suite; the backend tests skip without PyTorch
+web/                     browser test page: build.py, serve.py, index.html
 ```
 
 To add a model, subclass `Backend` in `app/backends/`, implement `is_available`, `load` and `_predict`, and add it to `_CLASSES` in `app/backends/__init__.py`.
@@ -259,7 +289,8 @@ Tested on a Ryzen AI 9 HX 370 laptop with Fedora 44:
 - The page in Chromium, driven with Playwright: one model and compare mode with all five models, light and dark mode at 1280 and 390 pixels wide, and a 1.7 MB phone photo, which the page shrank to 0.3 MB before upload and kept upright. No console errors, and no requests to anything but the server itself.
 - The loading bar and photo scan with BioCLIP 2.5 alone. In the CPU container the bar filled from empty to 73% during an 8.5-second load, then completed and faded without moving anything below it; a failed load (simulated with an error reply) leaves it full and red, with the message under it. The scan covers only the photo for landscape and portrait shots and stops sweeping when the browser asks for reduced motion; the bar still fills then, since it shows progress. With two models offered, the picker, compare mode and model headings still appear.
 - `pytest`: the API, label and checkpoint parsing, the PlantNet-300K and iNat21 load and predict code on small random-weight models, and the BioCLIP 2.5 Mobile scoring on a stand-in ONNX model (the model tests skip without PyTorch or onnxruntime). Run it with `pip install -r requirements-dev.txt && pytest`.
+- The browser test page in Chrome 154, driven with Playwright: all three models on the CPU and on the GPU, first download and reload from the browser's cache, and 390 pixels wide in dark mode. No console errors, and no requests to anything but the page's own server.
 
-**Not tested yet:** the "Take photo" button (it only shows on touch screens), drag-and-drop or paste, and Docker with its SELinux support turned on.
+**Not tested yet:** the "Take photo" button (it only shows on touch screens), drag-and-drop or paste, Docker with its SELinux support turned on, and the browser test page on a phone, in Safari or Firefox, over a real connection, or its memory use.
 
 Identification from a photo is a lead, not a verdict. Don't eat or handle a plant based on this alone.
