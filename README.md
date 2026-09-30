@@ -99,6 +99,16 @@ curl -L -o models/inat21-convnext/model.safetensors $H/convnext_large_mlp.laion2
 
 Their license is CC BY-NC 4.0: non-commercial use only.
 
+### Common names
+
+Each match shows an English common name under the scientific name when `models/common_names.json` has one. Build the file once, from this directory, with internet access; it needs only Python 3:
+
+```bash
+MODELS_DIR=./models python3 -m app.common_names
+```
+
+It covers the PlantNet-300K species, the BioCLIP list and the iNat21 plants. The 4,271 iNat21 plants take their names from `models/inat21/config.json`; the rest are iNaturalist's preferred English names, looked up one a second because iNaturalist asks API clients to stay under 60 requests a minute. For the 5,035-name list that took 11 minutes and named 4,814 species; the others show only the scientific name. Without the iNat21 config every name is looked up, about 85 minutes. Re-run it after adding species to `labels.txt`: it looks up only names that are not in the file yet, and the running service reads the new file without a restart. The service itself never contacts iNaturalist, and the file lives in `models/`, so it travels with the weights.
+
 ### How the models compare
 
 Sixteen photos from Wikipedia and Wikimedia Commons: ten species that are in PlantNet-300K, and six California or garden plants that are not (California poppy, poison oak, coast live oak, dandelion, English ivy, sunflower). Both BioCLIP entries used the 5,035-name list described above.
@@ -165,7 +175,7 @@ Or publish it through a Cloudflare tunnel and protect it with Cloudflare Access.
 Interactive docs at `/api/docs`.
 
 ```bash
-curl -F file=@fern.jpg -F backend=plantnet300k -F top_k=5 http://localhost:8000/api/identify
+curl -F file=@poppy.jpg -F backend=plantnet300k -F top_k=5 http://localhost:8000/api/identify
 ```
 
 ```json
@@ -177,7 +187,7 @@ curl -F file=@fern.jpg -F backend=plantnet300k -F top_k=5 http://localhost:8000/
   "load_ms": null,
   "cold_start": false,
   "image": {"width": 1536, "height": 1152},
-  "predictions": [{"name": "Pteridium aquilinum (L.) Kuhn", "score": 0.81}]
+  "predictions": [{"name": "Papaver rhoeas L.", "common_name": "Common poppy", "score": 0.97}]
 }
 ```
 
@@ -185,7 +195,7 @@ curl -F file=@fern.jpg -F backend=plantnet300k -F top_k=5 http://localhost:8000/
 - `GET /api/backends`: each model, whether it's ready, and why not if it isn't
 - `POST /api/identify`: `file` (required), `backend` (defaults to the first ready model), `top_k` (1 to 20, default 5)
 
-The first request to each model loads it and is slow; `cold_start` and `load_ms` tell you when that happened. Photos over `MAX_UPLOAD_MB` (default 15) are rejected. Scores are softmax probabilities within each model's own label set, not calibrated odds of being right.
+The first request to each model loads it and is slow; `cold_start` and `load_ms` tell you when that happened. Photos over `MAX_UPLOAD_MB` (default 15) are rejected. Scores are softmax probabilities within each model's own label set, not calibrated odds of being right. `common_name` comes from `models/common_names.json` and is `null` when there isn't one.
 
 ## Environment variables
 
@@ -207,6 +217,7 @@ The first request to each model loads it and is slow; `cold_start` and `load_ms`
 app/main.py              API routes and static UI
 app/backends/            one file per model; registry loads them lazily
 app/labels.py            label mapping and checkpoint parsing (pure Python)
+app/common_names.py      common-name table and the script that builds it
 app/static/index.html    the test page, no external requests
 tests/                   pytest suite; the backend tests skip without PyTorch
 ```

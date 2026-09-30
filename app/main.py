@@ -9,10 +9,11 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from . import backends
+from . import backends, common_names
 from .backends import BackendUnavailable
 from .config import get_settings
 from .device import describe_runtime
+from .labels import scientific_name
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("plant-id")
@@ -104,6 +105,7 @@ def identify(
             status_code=500, detail="Identification failed. See the server log."
         ) from None
 
+    common = common_names.load()
     return {
         "backend": model.id,
         "label": model.label,
@@ -112,7 +114,14 @@ def identify(
         "load_ms": None if load_ms is None else round(load_ms, 1),
         "cold_start": load_ms is not None,
         "image": {"width": image.width, "height": image.height},
-        "predictions": [{"name": p.name, "score": round(p.score, 6)} for p in preds],
+        "predictions": [
+            {
+                "name": p.name,
+                "common_name": common.get(scientific_name(p.name)),
+                "score": round(p.score, 6),
+            }
+            for p in preds
+        ],
     }
 
 
