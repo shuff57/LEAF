@@ -143,6 +143,16 @@
   .models > label { font-weight: 600; }
   #model { width: 100%; padding: 0.5rem 0.6rem; }
   .desc { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
+  .desc:empty { display: none; }
+  /* Which model fits which device, under the menu; the chosen model's row is marked */
+  .fit { width: 100%; border-collapse: collapse; font-size: 0.85rem; color: var(--ink-soft); }
+  .fit th, .fit td { padding: 5px 8px; text-align: left; vertical-align: top; }
+  .fit th { font-weight: 600; }
+  .fit td { border-top: 1px solid var(--line); text-wrap: pretty; }
+  .fit b { display: block; font-weight: 600; color: var(--ink); }
+  .fit th:nth-child(n+2), .fit td:nth-child(n+2) { text-align: right; white-space: nowrap; }
+  .fit tr[aria-current] td { background: var(--paper); color: var(--ink); }
+  .fit tr[aria-current] td:first-child { box-shadow: inset 3px 0 var(--moss); }
   .options { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; margin: 0 0 16px; }
   .options label { display: inline-flex; gap: 8px; align-items: center; }
   .options input[type="checkbox"] { accent-color: var(--moss); }
@@ -194,6 +204,10 @@
         <label for="model">Model</label>
         <select id="model" aria-describedby="model-desc"></select>
         <p class="desc" id="model-desc"></p>
+        <table class="fit" id="fit" hidden>
+          <thead><tr><th scope="col">Model</th><th scope="col">Download</th><th scope="col">Memory</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
       <div class="options">
         <label><input type="checkbox" id="compare"> Run every ready model and compare</label>
@@ -344,11 +358,18 @@ function renderModels(selected) {
   updateCompare();
 }
 
-/* The line under the menu: what the chosen model is. */
+/* Under the menu. With on-device models, a table of which model fits which device and what each one
+   takes, the chosen one marked; with server models alone, the chosen model's description. */
 function describe() {
-  const id = selectedId(), m = devModel(id), b = state.backends.find((x) => x.id === id);
-  $("#model-desc").textContent = m ? `Runs in this browser, so photos stay on this device; it downloads once. ${m.note}`
-    : b ? b.description : "No models are ready yet. The README explains which files to add.";
+  const id = selectedId(), b = state.backends.find((x) => x.id === id);
+  const row = (current, name, fits, ...cells) => el("tr", current ? { "aria-current": "true" } : {},
+    el("td", {}, el("b", { text: name }), fits), ...cells.map((text) => el("td", { text })));
+  $("#model-desc").textContent = !id ? "No models are ready yet. The README explains which files to add."
+    : dev.list.length ? "" : b?.description ?? "";
+  $("#fit").hidden = !dev.list.length;
+  $("#fit tbody").replaceChildren(
+    ...(state.backends.some((x) => x.available) ? [row(Boolean(b), "Server models", "Any device, online", "None", "None")] : []),
+    ...dev.list.map((m) => row(DEV + m.id === id, m.label, m.fits, `${mb(m.bytes)} MB`, m.memory)));
 }
 
 const selectedId = () => $("#model").value;

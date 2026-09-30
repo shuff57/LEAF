@@ -35,12 +35,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "models" / "browser"
 PART = 24 * 2**20
-# Shown under each model in the page's picker. Memory is the page's peak in Chrome on the laptop, GPU
-# buffers included, as a phone would count it (see the README).
-NOTES = {
-    "bioclip-mobile": "Made for phones: the quickest, but it misses more plants.",
-    "bioclip2": "Named all 16 test photos. Needs about 3 GB of memory, which can be too much for a phone.",
-    "bioclip25": "The newest and largest. Needs about 5 GB of memory, so it is for computers.",
+# The page's table under the model menu: the devices each model fits best, and the memory it takes, the
+# page's peak in Chrome on the laptop with GPU buffers included, as a phone would count it (see the README),
+# rounded up to a whole GB.
+FIT = {
+    "bioclip-mobile": {"fits": "Best on phones, tablets, mobile data", "memory": "1 GB"},
+    "bioclip2": {"fits": "Best on computers with 8 GB or more", "memory": "3 GB"},
+    "bioclip25": {"fits": "Best on computers with 16 GB and a GPU", "memory": "5 GB"},
 }
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("MODELS_DIR", str(ROOT / "models"))
@@ -178,7 +179,7 @@ def main() -> None:
         "table": "table-bioclip25.f16", "dim": write_table(BIOCLIP_25, "table-bioclip25.f16"),
         "scale": BioClipMobile.logit_scale,
         "crop": 224 / 255,  # its training: shorter side to 255, centre 224
-        "note": NOTES["bioclip-mobile"],
+        **FIT["bioclip-mobile"],
     }]
     for name, label, model_id, table in [
         ("bioclip2", "BioCLIP 2", "hf-hub:imageomics/bioclip-2", "table-bioclip2.f16"),
@@ -189,7 +190,7 @@ def main() -> None:
             "id": name, "label": label, "file": f"{name}.onnx", "data": f"{name}.onnx.data", "table": table,
             "dim": write_table(model_id, table), "scale": scale,
             "crop": 1.0,  # CLIP: shorter side to 224, centre 224
-            "note": NOTES[name],
+            **FIT[name],
         })
     for m in models:
         m["bytes"] = sum((OUT / m[k]).stat().st_size for k in ("file", "data") if k in m)
