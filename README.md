@@ -7,6 +7,8 @@ A small self-hosted plant identification service: a FastAPI backend with swappab
 | `plantnet300k` | ResNet trained on Pl@ntNet-300K (1,081 species) | Fast, small; European garden and wild plants |
 | `bioclip` | BioCLIP 2.5, zero-shot against a species list you provide | Anything on your list; heaviest |
 | `bioclip2` | BioCLIP 2, same species list | The same answers at half the memory and time; the best all-rounder in the comparison below |
+| `bioclip1` | The first BioCLIP (2023), same species list | A fifth of BioCLIP 2.5's memory, about 0.13 s a photo on a CPU |
+| `bioclip-mobile` | BioCLIP 2.5 Mobile, a 24 MB model trained to copy BioCLIP 2.5, same species list | Phones and browsers; less accurate |
 | `inat21` | EVA-02 Large fine-tuned on iNaturalist 2021 (4,271 plant species) | Worldwide plants, North American natives included |
 | `inat21-convnext` | ConvNeXt Large fine-tuned on iNaturalist 2021 (same species) | The same, lighter and faster |
 | `mock` | Placeholder results, no model | Testing the API and UI |
@@ -56,12 +58,21 @@ The 1,081 species were picked for the dataset, not for being common: dandelion, 
 
 ### BioCLIP
 
-Two BioCLIP checkpoints share one species list:
+Four BioCLIP models share one species list:
 
-- `bioclip`: BioCLIP 2.5 Huge by default, `hf-hub:imageomics/bioclip-2.5-vith14`: a ViT-H/14 image encoder and a 24-layer text encoder, 986 million parameters. open_clip downloads only its `open_clip_model.safetensors`, 3.94 GB (3.7 GiB in `models/hf`), and the label cache for 5,035 names adds 21 MB. It takes about 7.7 GiB of RAM on the CPU, or 3.9 GiB of GTT on the Radeon 890M, and loads in about 10 seconds once its label cache exists. `BIOCLIP_MODEL` swaps in another open_clip checkpoint, for example `hf-hub:imageomics/bioclip` (the first BioCLIP: ViT-B/16, 1.5 GiB, about 0.2 s per photo on CPU).
+- `bioclip`: BioCLIP 2.5 Huge by default, `hf-hub:imageomics/bioclip-2.5-vith14`: a ViT-H/14 image encoder and a 24-layer text encoder, 986 million parameters. open_clip downloads only its `open_clip_model.safetensors`, 3.94 GB (3.7 GiB in `models/hf`), and the label cache for 5,035 names adds 21 MB. It takes about 7.7 GiB of RAM on the CPU, or 3.9 GiB of GTT on the Radeon 890M, and loads in about 10 seconds once its label cache exists. `BIOCLIP_MODEL` swaps in another open_clip checkpoint.
 - `bioclip2`: BioCLIP 2, `hf-hub:imageomics/bioclip-2` (ViT-L/14, 1.7 GB download, about 3.6 GiB of RAM, about twice as fast as 2.5).
+- `bioclip1`: the first BioCLIP, `hf-hub:imageomics/bioclip` (ViT-B/16, 0.6 GB download, about 1.5 GiB of RAM).
+- `bioclip-mobile`: [BioCLIP 2.5 Mobile](https://huggingface.co/crazedcodernate/bioclip-2.5-mobile-fastvit) by Nate Hamilton (MIT license), an 11.6-million-parameter FastViT trained to reproduce BioCLIP 2.5's image embeddings on the 4,271 iNaturalist 2021 plants. Its answers land in BioCLIP 2.5's embedding space, so it is scored against BioCLIP 2.5's label table and has no text encoder of its own; that table has to exist first (identify one photo with `bioclip`). It runs on onnxruntime, about 0.6 GiB of RAM. Its author reports it gives BioCLIP 2.5's top answer 72% of the time on 2,000 held-out photos, and warns against using it for edibility or toxicity. The service expects its fp16 file at `models/bioclip-mobile/flora_student_fp16.onnx`:
 
-Both download from Hugging Face on first use into `models/hf` (needs internet once; afterwards they run offline). When the page offers more than one model, it names the checkpoint each answer came from.
+  ```bash
+  mkdir -p models/bioclip-mobile
+  curl -L -o models/bioclip-mobile/flora_student_fp16.onnx \
+    https://huggingface.co/crazedcodernate/bioclip-2.5-mobile-fastvit/resolve/29b474ea2a5d72b4646f036ead9441e0a22a5c62/flora_student_fp16.onnx
+  sha256sum models/bioclip-mobile/flora_student_fp16.onnx   # b152ee0b3fe8f7b6e01f27a580fa74fbec53c0519e4dccaebdb9e289d140c579
+  ```
+
+The three open_clip models download from Hugging Face on first use into `models/hf` (needs internet once; afterwards they run offline). When the page offers more than one model, it names the model each answer came from.
 
 BioCLIP only returns species that are on its list, `models/bioclip/labels.txt`, one scientific name per line (`labels.example.txt` shows the format). Without that file it uses the 1,019 PlantNet-300K species (author citations removed, duplicates merged). None of the six California and garden plants in the comparison below is on that list, so no BioCLIP could name them. Adding the 4,271 iNaturalist 2021 plant species from `models/inat21/config.json` (next section) gives 5,035 names, and BioCLIP 2 and 2.5 then named all six. Run this from this directory to write that list (PlantNet names only if the iNat21 config is absent), then append your own species at the end:
 
@@ -77,7 +88,7 @@ print("\n".join(sorted(names)))
 EOF
 ```
 
-Label embeddings are computed once per model and list and cached in `models/bioclip/cache`. That first start is slow on CPU: for 5,035 names about 6 minutes for BioCLIP 2 and 19 minutes for BioCLIP 2.5 on a 12-core Ryzen AI 9 HX 370 (1,019 names: 40 seconds and 3.5 minutes). Later starts take about 10 seconds. Copy `models/bioclip/cache` along with the weights when you deploy.
+Label embeddings are computed once per model and list and cached in `models/bioclip/cache`. That first start is slow on CPU: for 5,035 names about 2 minutes for BioCLIP 1, 6 for BioCLIP 2 and 19 for BioCLIP 2.5 on a 12-core Ryzen AI 9 HX 370 (1,019 names: 40 seconds for BioCLIP 2, 3.5 minutes for 2.5). Later starts take about 10 seconds. Copy `models/bioclip/cache` along with the weights when you deploy.
 
 ### iNaturalist 2021 classifiers
 
@@ -128,6 +139,17 @@ BioCLIP 2 is the best all-rounder here: every photo right, like BioCLIP 2.5, at 
 Times are the server's own `latency_ms` (the model only, not the upload): the warm median of 20 requests through the API of the CPU and ROCm containers under Podman on a Ryzen AI 9 HX 370 laptop. The models run in fp32, which this iGPU does slowly (see AMD GPU notes), so the GPU only helps PlantNet-300K and BioCLIP 2; EVA-02 on the GPU ranged from 1.5 to 9.6 s. Every model named the same plants on the GPU as on the CPU, under Docker as under Podman; one GPU run under Docker was noisier (BioCLIP 2.5 took 1.2 to 4.3 s per photo), so the table uses the Podman runs. RAM is the peak of a CPU process with that one model loaded; with all five loaded on the CPU, as after a compare run, the server held 7.9 GiB and peaked at 9.9 GiB while loading them.
 
 The iNat21 models' two PlantNet "misses" are the ZZ plant, which they don't list, and *Anemone nemorosa*, which they name correctly by its newer name *Anemonoides nemorosa*. Both put dandelion second, behind *Taraxacum erythrospermum*. A PlantCLEF 2024 classifier (DINOv2 ViT-B/14, 7,806 European species, `vincent-espitalier/dino-v2-reg4-with-plantclef2024-weights`) was tested too and left out: 5 of 16 top-1.
+
+The four BioCLIPs on the same 16 photos, through the service's backends on the laptop's CPU (warm median of 20, in a later, quieter run than the table above):
+
+| Model | Top-1, of 16 | Same top-1 as BioCLIP 2.5 | Time per photo | RAM |
+|---|---|---|---|---|
+| `bioclip` (2.5) | 16 | 16 | 0.77 s | 7.7 GiB |
+| `bioclip2` | 16 | 16 | 0.42 s | 3.6 GiB |
+| `bioclip1` | 15 | 15 | 0.13 s | 1.5 GiB |
+| `bioclip-mobile` | 13 | 13 | 0.05 s | 0.6 GiB |
+
+BioCLIP 1 called the coast live oak a European aspen (the oak came third). The Mobile model named the thistle's genus but not its species (*Cirsium neomexicanum*), and missed the pomegranate still life and the ZZ plant, which is not among the iNaturalist 2021 plants it was trained on.
 
 ## Run
 
@@ -207,7 +229,7 @@ The first request to each model loads it and is slow; `cold_start` and `load_ms`
 | `MODELS_DIR` | `/models` | Root for weights, labels, caches |
 | `DEVICE` | `auto` | `auto`, `cpu`, or `cuda` (ROCm also uses `cuda`) |
 | `DEFAULT_BACKEND` | first ready | Pre-selected model in the UI |
-| `BACKENDS` | `bioclip` | Models the page and API offer, comma-separated; an unknown id shows up as not ready |
+| `BACKENDS` | `bioclip` | Models the page and API offer, comma-separated: `plantnet300k`, `bioclip`, `bioclip2`, `bioclip1`, `bioclip-mobile`, `inat21`, `inat21-convnext`. An unknown id shows up as not ready |
 | `MAX_UPLOAD_MB` | `15` | Upload size limit |
 | `ENABLE_MOCK` | off | Show the placeholder model |
 | `PLANTNET_*` | see above | Weights, species files, architecture, pickle opt-in |
@@ -236,7 +258,7 @@ Tested on a Ryzen AI 9 HX 370 laptop with Fedora 44:
 - Both images under Podman (`podman-compose`) and under Docker Engine (`docker compose`): the CPU image, and the ROCm image on the Radeon 890M, where all five models ran on the GPU and named the same plants as on the CPU. Docker runs the container as root, so anything it writes into `models/` (a new BioCLIP label cache, a first download) will belong to root; in these runs everything was already there and it wrote nothing.
 - The page in Chromium, driven with Playwright: one model and compare mode with all five models, light and dark mode at 1280 and 390 pixels wide, and a 1.7 MB phone photo, which the page shrank to 0.3 MB before upload and kept upright. No console errors, and no requests to anything but the server itself.
 - The loading bar and photo scan with BioCLIP 2.5 alone. In the CPU container the bar filled from empty to 73% during an 8.5-second load, then completed and faded without moving anything below it; a failed load (simulated with an error reply) leaves it full and red, with the message under it. The scan covers only the photo for landscape and portrait shots and stops sweeping when the browser asks for reduced motion; the bar still fills then, since it shows progress. With two models offered, the picker, compare mode and model headings still appear.
-- `pytest`: the API, label and checkpoint parsing, and the PlantNet-300K and iNat21 load and predict code on small random-weight models (skipped without PyTorch). Run it with `pip install -r requirements-dev.txt && pytest`.
+- `pytest`: the API, label and checkpoint parsing, the PlantNet-300K and iNat21 load and predict code on small random-weight models, and the BioCLIP 2.5 Mobile scoring on a stand-in ONNX model (the model tests skip without PyTorch or onnxruntime). Run it with `pip install -r requirements-dev.txt && pytest`.
 
 **Not tested yet:** the "Take photo" button (it only shows on touch screens), drag-and-drop or paste, and Docker with its SELinux support turned on.
 

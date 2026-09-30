@@ -20,6 +20,8 @@ def test_bioclip_entries_name_their_checkpoint(client, monkeypatch):
     labels = {b["id"]: b["label"] for b in client.get("/api/backends").json()["backends"]}
     assert labels["bioclip"] == "BioCLIP (some-bioclip)"
     assert labels["bioclip2"] == "BioCLIP (bioclip-2)"
+    assert labels["bioclip1"] == "BioCLIP (bioclip)"
+    assert labels["bioclip-mobile"] == "BioCLIP 2.5 Mobile"
 
 
 def test_identify_happy_path(client, jpeg_bytes):

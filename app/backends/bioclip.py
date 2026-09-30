@@ -8,6 +8,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import logging
+import math
+from pathlib import Path
 
 from PIL import Image
 
@@ -19,6 +21,7 @@ from .base import Backend, BackendUnavailable, Prediction
 log = logging.getLogger(__name__)
 
 PROMPT = "a photo of {}."
+BIOCLIP_25 = "hf-hub:imageomics/bioclip-2.5-vith14"
 
 
 def _load_labels() -> list[str]:
@@ -32,6 +35,12 @@ def _load_labels() -> list[str]:
         f"No label list. Create {s.bioclip_labels} (one species per line) "
         "or provide the PlantNet-300K species file."
     )
+
+
+def _table_file(model_id: str, names: list[str]) -> Path:
+    """Where the label table (text embeddings) of `names` under `model_id` is cached."""
+    key = hashlib.sha1((model_id + "\n" + "\n".join(names)).encode("utf-8")).hexdigest()[:16]
+    return get_settings().models_dir / "bioclip" / "cache" / f"text-{key}.npy"
 
 
 class BioClip(Backend):
@@ -69,10 +78,7 @@ class BioClip(Backend):
         model = model.eval().to(self.device)
 
         self.names = _load_labels()
-        key = hashlib.sha1(
-            (self.model_id + "\n" + "\n".join(self.names)).encode("utf-8")
-        ).hexdigest()[:16]
-        cache = s.models_dir / "bioclip" / "cache" / f"text-{key}.npy"
+        cache = _table_file(self.model_id, self.names)
 
         if cache.is_file():
             text = torch.from_numpy(np.load(cache))
@@ -115,3 +121,71 @@ class BioClip2(BioClip):
     id = "bioclip2"
     hub_id = "hf-hub:imageomics/bioclip-2"
     description = "The previous BioCLIP, same species list: half the memory and about twice as fast."
+
+
+class BioClip1(BioClip):
+    id = "bioclip1"
+    hub_id = "hf-hub:imageomics/bioclip"
+    description = "The first BioCLIP (2023), same species list: a fifth of BioCLIP 2.5's memory."
+
+
+class BioClipMobile(Backend):
+    """BioCLIP 2.5 Mobile: an 11.6M-parameter FastViT trained to reproduce BioCLIP 2.5's image
+    embeddings. Its answers land in BioCLIP 2.5's embedding space, so it is scored against
+    BioCLIP 2.5's label table and needs no text encoder of its own.
+
+    By Nate Hamilton, MIT licensed: https://huggingface.co/crazedcodernate/bioclip-2.5-mobile-fastvit
+    """
+
+    id = "bioclip-mobile"
+    label = "BioCLIP 2.5 Mobile"
+    description = "A 24 MB copy of BioCLIP 2.5 made for phones, on the same species list. Less accurate."
+    weights = Path("bioclip-mobile") / "flora_student_fp16.onnx"  # under MODELS_DIR
+    logit_scale = math.exp(4.59375)  # BioCLIP 2.5's learned temperature, so scores compare with it
+
+    def is_available(self) -> tuple[bool, str]:
+        s = get_settings()
+        if not importlib.util.find_spec("onnxruntime"):
+            return False, "onnxruntime is not installed"
+        if not (s.models_dir / self.weights).is_file():
+            return False, f"Missing {s.models_dir / self.weights}"
+        try:
+            table = _table_file(BIOCLIP_25, _load_labels())
+        except BackendUnavailable as exc:
+            return False, str(exc)
+        if not table.is_file():
+            return False, (
+                "Needs BioCLIP 2.5's label table for this species list. Identify one photo with "
+                "BioCLIP 2.5 (bioclip) to build it."
+            )
+        return True, ""
+
+    def load(self) -> None:
+        import numpy as np
+        import onnxruntime as ort
+        from torchvision import transforms
+
+        ok, reason = self.is_available()
+        if not ok:
+            raise BackendUnavailable(reason)
+        self.names = _load_labels()
+        self.text = np.load(_table_file(BIOCLIP_25, self.names))
+        path = str(get_settings().models_dir / self.weights)
+        self.session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+        self._input = self.session.get_inputs()[0].name
+        # As the author's evaluation: shorter side to 255, centre 224 crop (both PIL operations).
+        self._tf = transforms.Compose([transforms.Resize(255), transforms.CenterCrop(224)])
+        self.loaded = True
+
+    def _predict(self, image: Image.Image, top_k: int) -> list[Prediction]:
+        import numpy as np
+
+        # RGB in 0..1, channels first; the model applies the ImageNet normalisation itself.
+        x = np.asarray(self._tf(image), dtype=np.float32).transpose(2, 0, 1)[None] / 255
+        embedding = self.session.run(None, {self._input: x})[0][0]  # already unit length
+        # einsum, not @: numpy hands @ to OpenBLAS, whose idle threads keep spinning and slowed the
+        # next onnxruntime run threefold (150 ms a photo instead of 50 on a 12-core laptop).
+        logits = self.logit_scale * np.einsum("ij,j->i", self.text, embedding)
+        probs = np.exp(logits - logits.max())
+        probs /= probs.sum()
+        return [Prediction(self.names[i], float(probs[i])) for i in np.argsort(-probs)[:top_k]]
