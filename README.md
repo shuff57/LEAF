@@ -320,4 +320,8 @@ Tested on a Ryzen AI 9 HX 370 laptop with Fedora 44:
 
 **Not tested yet:** taking a photo with "Take photo" (the button shows on an emulated touch screen), drag-and-drop or paste, Docker with its SELinux support turned on, and the on-device models on a real phone since the fix, in Safari or Firefox, or on Android. A page really closed for lack of memory wasn't reproduced; only the mark it leaves behind was, and whether iOS keeps that mark across its reload is untested.
 
+## License
+
+The code is MIT licensed (`LICENSE`). The model weights are not part of this repository and keep their own licenses: the BioCLIPs, BioCLIP 2.5 Mobile included, are MIT, and the iNaturalist 2021 classifiers are CC BY-NC 4.0, non-commercial only.
+
 Identification from a photo is a lead, not a verdict. Don't eat or handle a plant based on this alone.
