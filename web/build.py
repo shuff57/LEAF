@@ -2,8 +2,8 @@
 
     .venv/bin/python web/build.py [folder of .jpg photos to check the export with]
 
-BioCLIP 1, 2 and 2.5: the image encoder is exported to ONNX in fp16, with CLIP's normalisation and
-the final L2 normalisation inside the graph, so the page feeds it RGB in 0..1 and gets a unit-length
+BioCLIP 2 and 2.5: the image encoder is exported to ONNX in fp16, with CLIP's normalisation and the
+final L2 normalisation inside the graph, so the page feeds it RGB in 0..1 and gets a unit-length
 embedding back. BioCLIP 2.5 Mobile already works that way. The page scores that embedding against
 a label table (the text embeddings of the species list, stored as fp16), so the browser never runs
 a text encoder.
@@ -13,7 +13,7 @@ Cloudflare serves files up to 25 MiB, and Chrome keeps no single cache entry as 
 (610 MB). models.json lists the models, the files in parts with their full sizes, and a version, a
 hash of every file: the page names its cache after it, so a rebuild replaces what browsers kept.
 
-Needs the weights (BioCLIP 1, 2 and 2.5 in models/hf, the Mobile model in models/bioclip-mobile), the
+Needs the weights (BioCLIP 2 and 2.5 in models/hf, the Mobile model in models/bioclip-mobile), the
 label tables in models/bioclip/cache (the server writes each the first time its model runs; the
 Mobile model uses BioCLIP 2.5's), and onnx, onnxscript and onnxruntime in this environment.
 ONNX Runtime Web, the library that runs the models in the page, comes from npm at a pinned version
@@ -39,7 +39,6 @@ PART = 24 * 2**20
 # buffers included, as a phone would count it (see the README).
 NOTES = {
     "bioclip-mobile": "Made for phones: the quickest, but it misses more plants.",
-    "bioclip1": "The first BioCLIP (2023), quicker than BioCLIP 2.",
     "bioclip2": "Named all 16 test photos. Needs about 3 GB of memory, which can be too much for a phone.",
     "bioclip25": "The newest and largest. Needs about 5 GB of memory, so it is for computers.",
 }
@@ -182,7 +181,6 @@ def main() -> None:
         "note": NOTES["bioclip-mobile"],
     }]
     for name, label, model_id, table in [
-        ("bioclip1", "BioCLIP 1", "hf-hub:imageomics/bioclip", "table-bioclip1.f16"),
         ("bioclip2", "BioCLIP 2", "hf-hub:imageomics/bioclip-2", "table-bioclip2.f16"),
         ("bioclip25", "BioCLIP 2.5", BIOCLIP_25, "table-bioclip25.f16"),  # the Mobile model's table
     ]:

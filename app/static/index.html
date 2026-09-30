@@ -95,7 +95,7 @@
   .frame.dragging { --c: var(--moss); --w: 4px; }
   .frame:focus-visible { outline: 2px solid var(--moss); outline-offset: 4px; }
   .frame .prompt { max-width: 26ch; margin: 0; text-align: center; color: var(--ink-soft); }
-  .frame[hidden], .prompt[hidden], .shot[hidden], .options label[hidden] { display: none; }
+  .models[hidden], .frame[hidden], .prompt[hidden], .shot[hidden], .options label[hidden] { display: none; }
 
   /* The photo, and a scan that sweeps over it while it is being identified */
   .shot { --scan: 138 185 106; position: relative; overflow: hidden; }
@@ -117,7 +117,11 @@
   .scanning .shot::after { animation: sweep 1.6s ease-in-out infinite alternate; }
   @keyframes sweep { from { transform: translateY(-50%); } to { transform: translateY(283%); } }
 
-  .pick { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  /* The photo buttons and Identify share one row in equal columns: two on a computer, three on a touch
+     screen, where the text shrinks a little on narrow phones so that "Choose photo" stays on one line. */
+  .pick { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin-top: 16px; }
+  .pick .btn { padding-inline: 0.5rem; }
+  @media (pointer: coarse) { .pick .btn { padding-inline: 0.25rem; font-size: min(1rem, 3.9vw); } }
   .btn {
     font: inherit;
     padding: 0.6rem 1.1rem;
@@ -134,23 +138,12 @@
   @media (pointer: coarse) { .touch-only { display: inline-block; } }
   input[type="file"] { display: none; }
 
-  fieldset { margin: 24px 0 0; padding: 0; border: 0; min-width: 0; }
-  legend { padding: 0; margin-bottom: 4px; font-weight: 600; }
-  .model {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    column-gap: 10px;
-    padding: 10px 0;
-    border-top: 1px solid var(--line);
-    cursor: pointer;
-  }
-  .model input { margin: 5px 0 0; accent-color: var(--moss); }
-  .model .name { font-weight: 600; }
-  .model .desc { grid-column: 2; color: var(--ink-soft); font-size: 0.9rem; }
-  .model.off { opacity: 0.6; cursor: not-allowed; }
-  .group { margin: 14px 0 4px; font-size: 0.85rem; color: var(--ink-soft); }
-  .options { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; margin: 8px 0 20px; border-top: 1px solid var(--line); padding-top: 14px; }
-  fieldset[hidden] + .options { margin-top: 20px; }
+  /* The model menu, and the options under it, above the photo */
+  .models { display: grid; gap: 6px; margin-bottom: 12px; }
+  .models > label { font-weight: 600; }
+  #model { width: 100%; padding: 0.5rem 0.6rem; }
+  .desc { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
+  .options { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; margin: 0 0 16px; }
   .options label { display: inline-flex; gap: 8px; align-items: center; }
   .options input[type="checkbox"] { accent-color: var(--moss); }
   select { font: inherit; padding: 0.25rem 0.4rem; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
@@ -197,27 +190,28 @@
 
   <main class="bench">
     <section aria-label="Photo and model">
-      <div class="frame" id="frame" role="button" tabindex="0" aria-label="Choose a photo">
-        <p class="prompt" id="prompt">Drop a photo here, paste one, or choose a file.</p>
-        <div class="shot" id="shot" hidden><img id="preview" alt="Selected plant photo"></div>
+      <div class="models" id="models">
+        <label for="model">Model</label>
+        <select id="model" aria-describedby="model-desc"></select>
+        <p class="desc" id="model-desc"></p>
       </div>
-      <div class="pick">
-        <button class="btn" type="button" id="choose">Choose photo</button>
-        <button class="btn touch-only" type="button" id="camera">Take photo</button>
-      </div>
-      <input type="file" id="file" accept="image/*">
-      <input type="file" id="cam" accept="image/*" capture="environment">
-
-      <fieldset id="models">
-        <legend>Model</legend>
-      </fieldset>
       <div class="options">
         <label><input type="checkbox" id="compare"> Run every ready model and compare</label>
         <label>Results shown
           <select id="topk"><option>3</option><option selected>5</option><option>10</option></select>
         </label>
       </div>
-      <button class="btn primary" type="button" id="go" disabled>Identify</button>
+      <div class="frame" id="frame" role="button" tabindex="0" aria-label="Choose a photo">
+        <p class="prompt" id="prompt">Drop a photo here, paste one, or choose a file.</p>
+        <div class="shot" id="shot" hidden><img id="preview" alt="Selected plant photo"></div>
+      </div>
+      <div class="pick">
+        <button class="btn touch-only" type="button" id="camera">Take photo</button>
+        <button class="btn" type="button" id="choose">Choose photo</button>
+        <button class="btn primary" type="button" id="go" disabled>Identify</button>
+      </div>
+      <input type="file" id="file" accept="image/*">
+      <input type="file" id="cam" accept="image/*" capture="environment">
     </section>
 
     <section aria-label="Results" aria-live="polite">
@@ -230,7 +224,7 @@
 
   <footer>
     <p>A photo match is a lead, not a verdict. Confirm with a field guide or a local expert, and never eat or handle a plant based on this result alone.</p>
-    <p id="credits" hidden>On-device models: <a href="https://huggingface.co/imageomics/bioclip">BioCLIP</a>, <a href="https://huggingface.co/imageomics/bioclip-2">BioCLIP 2</a> and <a href="https://huggingface.co/imageomics/bioclip-2.5-vith14">BioCLIP 2.5</a> by Imageomics, and <a href="https://huggingface.co/crazedcodernate/bioclip-2.5-mobile-fastvit">BioCLIP 2.5 Mobile</a> by Nate Hamilton, all MIT licensed. Common names from iNaturalist.</p>
+    <p id="credits" hidden>On-device models: <a href="https://huggingface.co/imageomics/bioclip-2">BioCLIP 2</a> and <a href="https://huggingface.co/imageomics/bioclip-2.5-vith14">BioCLIP 2.5</a> by Imageomics, and <a href="https://huggingface.co/crazedcodernate/bioclip-2.5-mobile-fastvit">BioCLIP 2.5 Mobile</a> by Nate Hamilton, all MIT licensed. Common names from iNaturalist.</p>
 </div>
 
 <script>
@@ -238,9 +232,10 @@
 const $ = (sel) => document.querySelector(sel);
 const state = { file: null, previewUrl: null, backends: [], busy: false };
 /* Models that run on this device (web/build.py writes them to models/): the list, the files that come
-   in parts with their full sizes, and the browser cache that keeps them, named after the build. */
-const dev = { list: [], split: {}, cache: "leaf", gpu: null, labels: null };
-const DEV = "device:";  // their radio values, so they never clash with the server's model ids
+   in parts with their full sizes, the browser cache that keeps them, named after the build, the model
+   the menu wants now, and why the page picked it when it did. */
+const dev = { list: [], split: {}, cache: "leaf", gpu: null, labels: null, want: null, why: null, starting: Promise.resolve() };
+const DEV = "device:";  // their menu values, so they never clash with the server's model ids
 
 function el(tag, props = {}, ...kids) {
   const node = document.createElement(tag);
@@ -261,7 +256,7 @@ async function api(path, options) {
   return body;
 }
 
-/* ---------- the model list: the server's and this device's ---------- */
+/* ---------- the model menu: the server's models and this device's ---------- */
 
 async function loadMeta() {
   const [list, local] = await Promise.all([
@@ -278,16 +273,30 @@ async function loadMeta() {
   if (list.error && !dev.list.length) {
     showLoad("error", `Cannot reach the server: ${list.error}`);
   } else {
-    // With no server model on offer, as on the static site, phones start with the small model.
-    const phone = matchMedia("(pointer: coarse)").matches;
-    const first = dev.list.find((m) => m.id === (phone ? "bioclip-mobile" : "bioclip2")) || dev.list[0];
-    renderModels(list.default ?? (first && DEV + first.id));
+    renderModels(list.default ?? smartPick());  // the server's default first: it costs this device nothing
     const died = dev.list.find((m) => m.id === remembered());
     remember(null);
     if (died) showLoad("error", `${died.label} closed this page as it started, which happens when a device runs out of memory for a model. A smaller one should work.`);
     else preload();
   }
   updateGo();
+}
+
+/* The on-device model to start with when the server offers none, as on the static site: the small
+   one on a phone or tablet, on a connection that may cost money or is slow, or with under 8 GB of
+   memory, and BioCLIP 2 otherwise. Safari and Firefox report neither memory nor connection, so there
+   only the pointer counts. The menu still offers every model. */
+function smartPick() {
+  const net = navigator.connection || {};
+  const why = matchMedia("(pointer: coarse)").matches ? "this looks like a phone or tablet"
+    : net.saveData ? "Data Saver is on"
+    : net.type === "cellular" ? "this is a mobile data connection"
+    : /2g|3g/.test(net.effectiveType) ? "this connection is slow"
+    : navigator.deviceMemory < 8 ? `this device reports ${navigator.deviceMemory} GB of memory`
+    : "";
+  const m = dev.list.find((x) => x.id === (why ? "bioclip-mobile" : "bioclip2")) || dev.list[0];
+  if (why && m) dev.why = { id: m.id, text: why };
+  return m ? DEV + m.id : null;
 }
 
 function showLoad(step, text = "", fraction = 0) {
@@ -301,46 +310,48 @@ function showLoad(step, text = "", fraction = 0) {
 /* Load the preselected model as soon as the page opens, so the first photo doesn't wait for it. */
 async function preload() {
   const m = devModel(selectedId());
-  if (m) return loadDevice(m).catch((err) => console.warn(err));  // the status line says what failed
+  if (m) return loadDevice(m).catch((err) => err === SUPERSEDED || console.warn(err));  // the status line says what failed
   const info = state.backends.find((b) => b.id === selectedId());
   if (!info || info.loaded) return;
   showLoad("loading", "Loading the model…");
   try {
     await api(`api/load?backend=${encodeURIComponent(info.id)}`, { method: "POST" });
     info.loaded = true;
-    showLoad("done");
+    if (selectedId() === info.id) showLoad("done");  // unless another model was chosen meanwhile
   } catch (err) {
-    showLoad("error", `The model did not load. ${err.message}`);
+    if (selectedId() === info.id) showLoad("error", `The model did not load. ${err.message}`);
   }
 }
 
 function renderModels(selected) {
-  const box = $("#models");
-  box.replaceChildren(el("legend", { text: "Model" }));
-  const add = (value, name, desc, reason) => {  // reason: why the model is not ready, or null
-    const input = el("input", { type: "radio", name: "backend", value });
-    input.disabled = reason !== null;
-    input.checked = value === selected;
-    box.append(
-      el("label", { class: "model" + (reason === null ? "" : " off") },
-        input, el("span", { class: "name", text: name }),
-        el("span", { class: "desc", text: reason === null ? desc : `${desc} Not ready: ${reason}` }))
-    );
-  };
-  if (state.backends.length && dev.list.length) box.append(el("p", { class: "group", text: "On the server" }));
-  for (const b of state.backends) add(b.id, b.label, b.description, b.available ? null : b.reason);
-  if (dev.list.length) box.append(el("p", { class: "group", text: "On this device: it runs in your browser, and photos stay here" }));
-  for (const m of dev.list) add(DEV + m.id, m.label, `Downloads ${mb(m.bytes)} MB once. ${m.note}`, null);
-  const inputs = box.querySelectorAll("input");
-  if (![...inputs].some((i) => !i.disabled)) {
-    box.append(el("p", { class: "note", text: "No models are ready yet. The README explains which files to add." }));
+  const select = $("#model");
+  select.replaceChildren();
+  // With models in both places, the menu groups them and each name says where it runs.
+  const both = state.backends.length > 0 && dev.list.length > 0;
+  const group = (label) => (both ? select.appendChild(el("optgroup", { label })) : select);
+  const server = group("On the server");
+  for (const b of state.backends) {
+    const option = el("option", { value: b.id, text: b.available ? b.label + (both ? " · server" : "") : `${b.label} · not ready: ${b.reason}` });
+    option.disabled = !b.available;
+    server.append(option);
   }
+  const device = group("On this device");
+  for (const m of dev.list) device.append(el("option", { value: DEV + m.id, text: `${m.label} · ${both ? "this device, " : ""}${mb(m.bytes)} MB` }));
+  select.value = selected ?? "";
+  // A single model that is ready leaves nothing to choose, so the menu goes.
+  $("#models").hidden = select.options.length === 1 && !select.options[0].disabled;
+  describe();
   updateCompare();
-  // A single model that is ready leaves nothing to choose, so the picker goes.
-  box.hidden = inputs.length === 1 && !inputs[0].disabled;
 }
 
-const selectedId = () => { const r = document.querySelector('input[name="backend"]:checked'); return r && r.value; };
+/* The line under the menu: what the chosen model is. */
+function describe() {
+  const id = selectedId(), m = devModel(id), b = state.backends.find((x) => x.id === id);
+  $("#model-desc").textContent = m ? `Runs in this browser, so photos stay on this device; it downloads once. ${m.note}`
+    : b ? b.description : "No models are ready yet. The README explains which files to add.";
+}
+
+const selectedId = () => $("#model").value;
 const devModel = (value) => dev.list.find((m) => DEV + m.id === value);
 /* What a comparison runs: every server model that is ready, and the on-device model if it is loaded. */
 const readyIds = () => [
@@ -445,8 +456,9 @@ async function openCache() {
 /* A model file: from this browser's cache, or downloaded and kept there. Files over 24 MiB come in
    parts (Cloudflare serves up to 25 MiB) and are kept part by part: Chrome keeps no single entry of
    610 MB, and an interrupted download resumes from the last whole part. A private window or a full
-   disk can refuse to keep them; the model still runs. */
-async function getBytes(url, progress = () => {}) {
+   disk can refuse to keep them; the model still runs. A file in parts stops at its next part once
+   `stale()` says another model was chosen, and the parts kept so far stay for next time. */
+async function getBytes(url, progress = () => {}, stale = () => false) {
   const cache = await openCache();
   let bytes, fresh = 0, kept = Boolean(cache);
   const keep = (key, data) => cache?.put(key, new Response(data, { headers: { "content-length": String(data.length) } }))
@@ -454,6 +466,7 @@ async function getBytes(url, progress = () => {}) {
   if (dev.split[url]) {
     bytes = new Uint8Array(dev.split[url]);
     for (let i = 0, got = 0; got < bytes.length; i++) {
+      if (stale()) throw SUPERSEDED;
       const key = `${url}.${i}`, hit = await cache?.match(key), start = got;
       got = await readInto(hit || (await fetchOk(key)), bytes, got, progress);
       if (!hit) { fresh++; await keep(key, bytes.subarray(start, got)); }
@@ -498,58 +511,82 @@ function remembered() {
   try { return sessionStorage.getItem("leaf-starting"); } catch (_) { return null; }
 }
 
+/* Another model was chosen before this one finished loading: not an error to show. */
+const SUPERSEDED = new Error("Another model was chosen before this one finished loading.");
+
 /* Downloads (or takes from the cache) and starts an on-device model: on the GPU if the browser offers
-   one, and on the CPU if that fails, so nobody has to choose. One at a time: they are big. */
+   one, and on the CPU if that fails, so nobody has to choose. The latest choice wins: a model chosen
+   before it stops downloading at its next part, and only one model is held in memory. The one loaded
+   before stays usable until the new one starts. */
 function loadDevice(m) {
+  dev.want = m;
+  if (m.session) showLoad("idle", m.status);
   m.loading ??= (async () => {
-    for (const other of dev.list) {
-      if (other === m || !other.session) continue;
-      await other.session.release();
-      Object.assign(other, { session: null, loading: null, run: null });
-      updateCompare();
-    }
-    const show = (got, total) => showLoad("progress", `Downloading ${m.label}: ${mb(got)} of ${mb(total)} MB`, got / total);
+    const stale = () => dev.want !== m;
+    const show = (got, total) => stale() || showLoad("progress", `Downloading ${m.label}: ${mb(got)} of ${mb(total)} MB`, got / total);
     const [eps, labels, table, graph, data] = await Promise.all([
       hasGpu().then((gpu) => (gpu ? ["webgpu", "wasm"] : ["wasm"])),
       (dev.labels ??= fetchOk("models/labels.json").then((r) => r.json())),
       getBytes(`models/${m.table}`),
-      getBytes(`models/${m.file}`, m.data ? undefined : show),
-      m.data && getBytes(`models/${m.data}`, show),  // the weights, as ONNX external data
+      getBytes(`models/${m.file}`, m.data ? undefined : show, stale),
+      m.data && getBytes(`models/${m.data}`, show, stale),  // the weights, as ONNX external data
       hasGpu().then((gpu) => runtime(gpu ? "webgpu" : "wasm")),  // downloaded alongside the model
     ]);
-    showLoad("progress", `Starting ${m.label}…`, 1);
-    remember(m.id);  // starting is when memory peaks
+    // One start at a time, and no other model in memory while it runs: starting is when memory peaks.
+    const before = dev.starting;
+    let done;
+    dev.starting = new Promise((resolve) => (done = resolve));
+    await before;
     let gpuFailed = false;
-    for (const ep of eps) {
-      let session;
-      try {
-        const ort = await runtime(ep);
-        session = await ort.InferenceSession.create(graph.bytes, {
-          executionProviders: [ep], ...(data && { externalData: [{ path: m.data, data: data.bytes }] }),
-        });
-        const [input] = session.inputNames, [output] = session.outputNames;
-        m.run = async (x) => (await session.run({ [input]: new ort.Tensor("float32", x, [1, 3, 224, 224]) }))[output].data;
-        await m.run(new Float32Array(3 * 224 * 224));  // prepares the kernels, and proves this path works
-        Object.assign(m, { session, ep, names: labels.names, common: labels.common, vectors: halfToFloat(table.bytes) });
-        break;
-      } catch (err) {
-        if (ep === "wasm") throw err;
-        console.warn(`${m.label} did not run on the GPU; trying the CPU.`, err);
-        gpuFailed = true;
-        dev.gpu = Promise.resolve(false);  // nor the next model: the WebGPU build may be stuck now
-        session?.release().catch((e) => console.warn(e));  // not awaited, in case it is
+    try {
+      if (stale()) throw SUPERSEDED;
+      for (const other of dev.list) {
+        if (other === m || !other.session) continue;
+        await other.session.release();
+        Object.assign(other, { session: null, loading: null, run: null });
       }
+      updateCompare();
+      showLoad("progress", `Starting ${m.label}…`, 1);
+      remember(m.id);  // left behind if this start kills the page
+      for (const ep of eps) {
+        let session;
+        try {
+          const ort = await runtime(ep);
+          session = await ort.InferenceSession.create(graph.bytes, {
+            executionProviders: [ep], ...(data && { externalData: [{ path: m.data, data: data.bytes }] }),
+          });
+          const [input] = session.inputNames, [output] = session.outputNames;
+          m.run = async (x) => (await session.run({ [input]: new ort.Tensor("float32", x, [1, 3, 224, 224]) }))[output].data;
+          await m.run(new Float32Array(3 * 224 * 224));  // prepares the kernels, and proves this path works
+          Object.assign(m, { session, ep, names: labels.names, common: labels.common, vectors: halfToFloat(table.bytes) });
+          break;
+        } catch (err) {
+          if (ep === "wasm") throw err;
+          console.warn(`${m.label} did not run on the GPU; trying the CPU.`, err);
+          gpuFailed = true;
+          dev.gpu = Promise.resolve(false);  // nor the next model: the WebGPU build may be stuck now
+          session?.release().catch((e) => console.warn(e));  // not awaited, in case it is
+        }
+      }
+      if (stale()) {  // another model was chosen while this one started
+        await m.session.release();
+        Object.assign(m, { session: null, run: null });
+        throw SUPERSEDED;
+      }
+    } finally {
+      remember(null);
+      done();
     }
-    remember(null);
-    showLoad("done", `${m.label} is ready on this device's ${m.ep === "webgpu" ? "GPU" : "CPU"}` +
+    m.status = `${m.label} is ready on this device's ${m.ep === "webgpu" ? "GPU" : "CPU"}` +
       (gpuFailed ? ": the GPU did not run it." : ".") +
-      (graph.kept && (!data || data.kept) ? "" : " This browser did not keep a copy, so it downloads again next time."));
+      (dev.why?.id === m.id ? ` Chosen because ${dev.why.text}.` : "") +
+      (graph.kept && (!data || data.kept) ? "" : " This browser did not keep a copy, so it downloads again next time.");
+    showLoad("done", m.status);
     updateCompare();
     return m;
   })().catch((err) => {
     m.loading = null;
-    remember(null);
-    showLoad("error", `${m.label} did not load. ${err.message ?? err}`);
+    if (err !== SUPERSEDED) showLoad("error", `${m.label} did not load. ${err.message ?? err}`);
     throw err;
   });
   return m.loading;
@@ -630,7 +667,7 @@ async function identify() {
     try {
       let data;
       if (m) {
-        await loadDevice(m);
+        if (!m.session) await loadDevice(m);  // one already loaded runs as it is, without taking over the menu's choice
         data = { label, predictions: rank(m, await m.run(await pixels(state.file, m.crop)), topK) };
       } else {
         const form = new FormData();
@@ -683,9 +720,16 @@ function renderError(label, message) {
   return run;
 }
 
-$("#models").addEventListener("change", () => {
+$("#model").addEventListener("change", () => {
+  dev.why = null;  // chosen by hand now
+  describe();
+  updateGo();
   const m = devModel(selectedId());
-  if (m) loadDevice(m).catch((err) => console.warn(err));  // the status line says what failed
+  if (m) loadDevice(m).catch((err) => err === SUPERSEDED || console.warn(err));  // the status line says what failed
+  else {
+    dev.want = null;  // a server model: an on-device download stops at its next part
+    showLoad("idle");
+  }
 });
 $("#go").addEventListener("click", identify);
 loadMeta();
