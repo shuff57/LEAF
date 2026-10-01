@@ -122,6 +122,7 @@ def test_serves_ui(client):
     assert r.status_code == 200
     assert "Identify a plant" in r.text
     assert 'href="app.html"' in r.text  # the home page links the workbench
+    assert "github.com/shuff57/LEAF" in r.text  # the GitHub button
     for anchor in ('id="overview"', 'id="examples"', 'id="models"'):
         assert anchor in r.text
     # Cross-origin isolation, which the on-device models need to run on more than one CPU thread

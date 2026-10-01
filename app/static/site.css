@@ -38,6 +38,8 @@
  .site-nav a { color: var(--ink-soft); text-decoration: none; }
  .site-nav a:hover, .site-nav a:focus-visible { color: var(--moss); text-decoration: underline; text-underline-offset: 3px; }
  .site-nav a:focus-visible, .hero-link:focus-visible, .example-link:focus-visible { outline: 2px solid var(--moss); outline-offset: 3px; }
+ .site-nav a.gh { padding: 0.28rem 0.7rem; border: 1px solid var(--line); border-radius: 6px; }
+ .site-nav a.gh:hover { border-color: var(--moss); text-decoration: none; }
  .hero { display: grid; grid-template-columns: minmax(0, 7fr) minmax(260px, 5fr); gap: clamp(28px, 7vw, 88px); align-items: end; min-height: min(560px, calc(100dvh - 88px)); padding: clamp(28px, 7vw, 92px) 0 clamp(44px, 7vw, 88px); border-bottom: 1px solid var(--line); }
  .eyebrow { margin: 0 0 13px; color: var(--moss); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
  .hero h1 { max-width: 10ch; font-size: clamp(3.2rem, 8vw, 6.8rem); line-height: 0.93; }
