@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>L.E.A.F. workbench: identify a plant from a photo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%BF%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="wrap">
+ <header id="overview">
+ <div class="site-nav" aria-label="Primary navigation">
+ <a class="mark" href="index.html" aria-label="L.E.A.F. home">L.E.A.F.</a>
+ <nav><a href="index.html#examples">Example results</a><a href="index.html#models">How it runs</a><a href="#workbench">Try it</a></nav>
+ </div>
+ <div class="masthead">
+ <h1>The workbench</h1>
+ <p class="lede">Lightweight Engine for Assessing Flora. Add a plant photo, choose a model, and inspect its ranked matches.</p>
+ <div class="load" id="load" aria-hidden="true"><span></span></div>
+ <p class="status" id="status" aria-live="polite"></p>
+ </div>
+ </header>
+
+ <main class="bench" id="workbench">
+   <section aria-label="Photo and model">
+     <div class="models" id="model-picker">
+       <label for="model">Model</label>
+       <select id="model" aria-describedby="model-desc"></select>
+       <p class="desc" id="model-desc"></p>
+       <table class="fit" id="fit" hidden>
+         <thead><tr><th scope="col">Model</th><th scope="col">Download</th><th scope="col">Memory</th></tr></thead>
+         <tbody></tbody>
+       </table>
+     </div>
+     <div class="options">
+       <label><input type="checkbox" id="compare"> Run every ready model and compare</label>
+       <label>Results shown
+         <select id="topk"><option>3</option><option selected>5</option><option>10</option></select>
+       </label>
+     </div>
+     <div class="frame" id="frame" role="button" tabindex="0" aria-label="Choose a photo">
+       <p class="prompt" id="prompt">Drop a photo here, paste one, or choose a file.</p>
+       <div class="shot" id="shot" hidden><img id="preview" alt="Selected plant photo"></div>
+     </div>
+     <div class="pick">
+       <button class="btn touch-only" type="button" id="camera">Take photo</button>
+       <button class="btn" type="button" id="choose">Choose photo</button>
+       <button class="btn primary" type="button" id="go" disabled>Identify</button>
+     </div>
+     <input type="file" id="file" accept="image/*">
+     <input type="file" id="cam" accept="image/*" capture="environment">
+   </section>
+
+   <section aria-label="Results" aria-live="polite">
+     <div class="results" id="results">
+       <p class="empty">Add a photo, then choose Identify. The closest matches appear here.</p>
+     </div>
+     <p class="note">Scores show how a model splits its confidence among the plants it knows. They are not the chance that the answer is right.</p>
+   </section>
+ </main>
+
+ <footer>
+   <p>A photo match is a lead, not a verdict. Confirm with a field guide or a local expert, and never eat or handle a plant based on this result alone.</p>
+   <p id="credits" hidden>On-device models: <a href="https://huggingface.co/imageomics/bioclip-2">BioCLIP 2</a> and <a href="https://huggingface.co/imageomics/bioclip-2.5-vith14">BioCLIP 2.5</a> by Imageomics, and <a href="https://huggingface.co/crazedcodernate/bioclip-2.5-mobile-fastvit">BioCLIP 2.5 Mobile</a> by Nate Hamilton, all MIT licensed. Common names from iNaturalist.</p>
+ </footer>
+</div>
+
+<script>
+"use strict";
+const $ = (sel) => document.querySelector(sel);
+const state = { file: null, previewUrl: null, backends: [], busy: false };
+/* Models that run on this device (web/build.py writes them to models/): the list, the files that come
+   in parts with their full sizes, the browser cache that keeps them, named after the build, the model
+   the menu wants now, and why the page picked it when it did. */
+const dev = { list: [], split: {}, cache: "leaf", gpu: null, labels: null, want: null, why: null, starting: Promise.resolve() };
+const DEV = "device:";  // their menu values, so they never clash with the server's model ids
+
+function el(tag, props = {}, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") node.className = v;
+    else if (k === "text") node.textContent = v;
+    else node.setAttribute(k, v);
+  }
+  node.append(...kids);
+  return node;
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  let body = null;
+  try { body = await res.json(); } catch (_) { /* non-JSON error page */ }
+  if (!res.ok) throw new Error((body && body.detail) || `Server returned ${res.status}`);
+  return body;
+}
+
+/* ---------- the model menu: the server's models and this device's ---------- */
+
+async function loadMeta() {
+  const [list, local] = await Promise.all([
+    api("api/backends").catch((err) => ({ backends: [], default: null, error: err.message })),
+    fetch("models/models.json").then((r) => (r.ok ? r.json() : null)).catch(() => null),  // none without a build
+  ]);
+  state.backends = list.backends;
+  if (local) {
+    Object.assign(dev, { list: local.models, split: local.split, cache: `leaf-${local.version}` });
+    // Copies kept from an earlier build: one with other models or species replaces them.
+    self.caches?.keys().then((names) => names.forEach((name) => name !== dev.cache && caches.delete(name)), (err) => console.warn(err));
+  }
+  $("#credits").hidden = !dev.list.length;
+  if (list.error && !dev.list.length) {
+    showLoad("error", `Cannot reach the server: ${list.error}`);
+  } else {
+    renderModels(list.default ?? smartPick());  // the server's default first: it costs this device nothing
+    const died = dev.list.find((m) => m.id === remembered());
+    remember(null);
+    if (died) showLoad("error", `${died.label} closed this page as it started, which happens when a device runs out of memory for a model. A smaller one should work.`);
+    else preload();
+  }
+  updateGo();
+}
+
+/* The on-device model to start with when the server offers none, as on the static site: the small
+   one on a phone or tablet, on a connection that may cost money or is slow, or with under 8 GB of
+   memory, and BioCLIP 2 otherwise. Safari and Firefox report neither memory nor connection, so there
+   only the pointer counts. The menu still offers every model. */
+function smartPick() {
+  const net = navigator.connection || {};
+  const why = matchMedia("(pointer: coarse)").matches ? "this looks like a phone or tablet"
+    : net.saveData ? "Data Saver is on"
+    : net.type === "cellular" ? "this is a mobile data connection"
+    : /2g|3g/.test(net.effectiveType) ? "this connection is slow"
+    : navigator.deviceMemory < 8 ? `this device reports ${navigator.deviceMemory} GB of memory`
+    : "";
+  const m = dev.list.find((x) => x.id === (why ? "bioclip-mobile" : "bioclip2")) || dev.list[0];
+  if (why && m) dev.why = { id: m.id, text: why };
+  return m ? DEV + m.id : null;
+}
+
+function showLoad(step, text = "", fraction = 0) {
+  const bar = $("#load");
+  void bar.offsetWidth;  // lay the bar out first, so a new fill starts from empty
+  bar.dataset.state = step;
+  bar.firstElementChild.style.width = step === "progress" ? `${100 * fraction}%` : "";  // a measured fill
+  $("#status").textContent = text;
+}
+
+/* Load the preselected model as soon as the page opens, so the first photo doesn't wait for it. */
+async function preload() {
+  const m = devModel(selectedId());
+  if (m) return loadDevice(m).catch((err) => err === SUPERSEDED || console.warn(err));  // the status line says what failed
+  const info = state.backends.find((b) => b.id === selectedId());
+  if (!info || info.loaded) return;
+  showLoad("loading", "Loading the model…");
+  try {
+    await api(`api/load?backend=${encodeURIComponent(info.id)}`, { method: "POST" });
+    info.loaded = true;
+    if (selectedId() === info.id) showLoad("done");  // unless another model was chosen meanwhile
+  } catch (err) {
+    if (selectedId() === info.id) showLoad("error", `The model did not load. ${err.message}`);
+  }
+}
+
+function renderModels(selected) {
+  const select = $("#model");
+  select.replaceChildren();
+  // With models in both places, the menu groups them and each name says where it runs.
+  const both = state.backends.length > 0 && dev.list.length > 0;
+  const group = (label) => (both ? select.appendChild(el("optgroup", { label })) : select);
+  const server = group("On the server");
+  for (const b of state.backends) {
+    const option = el("option", { value: b.id, text: b.available ? b.label + (both ? " · server" : "") : `${b.label} · not ready: ${b.reason}` });
+    option.disabled = !b.available;
+    server.append(option);
+  }
+  const device = group("On this device");
+  for (const m of dev.list) device.append(el("option", { value: DEV + m.id, text: `${m.label} · ${both ? "this device, " : ""}${mb(m.bytes)} MB` }));
+  select.value = selected ?? "";
+  // A single model that is ready leaves nothing to choose, so the menu goes.
+ $("#model-picker").hidden = select.options.length === 1 && !select.options[0].disabled;
+  describe();
+  updateCompare();
+}
+
+/* Under the menu. With on-device models, a table of which model fits which device and what each one
+   takes, the chosen one marked; with server models alone, the chosen model's description. */
+function describe() {
+  const id = selectedId(), b = state.backends.find((x) => x.id === id);
+  const row = (current, name, fits, ...cells) => el("tr", current ? { "aria-current": "true" } : {},
+    el("td", {}, el("b", { text: name }), fits), ...cells.map((text) => el("td", { text })));
+  $("#model-desc").textContent = !id ? "No models are ready yet. The README explains which files to add."
+    : dev.list.length ? "" : b?.description ?? "";
+  $("#fit").hidden = !dev.list.length;
+  $("#fit tbody").replaceChildren(
+    ...(state.backends.some((x) => x.available) ? [row(Boolean(b), "Server models", "Any device, online", "None", "None")] : []),
+    ...dev.list.map((m) => row(DEV + m.id === id, m.label, m.fits, `${mb(m.bytes)} MB`, m.memory)));
+}
+
+const selectedId = () => $("#model").value;
+const devModel = (value) => dev.list.find((m) => DEV + m.id === value);
+/* What a comparison runs: every server model that is ready, and the on-device model if it is loaded. */
+const readyIds = () => [
+  ...state.backends.filter((b) => b.available).map((b) => b.id),
+  ...dev.list.filter((m) => m.session).map((m) => DEV + m.id),
+];
+
+function updateCompare() {
+  const few = readyIds().length < 2;  // comparing needs at least two ready models
+  $("#compare").closest("label").hidden = few;
+  if (few) $("#compare").checked = false;
+}
+
+function updateGo() {
+  $("#go").disabled = state.busy || !state.file || !selectedId();
+  $("#go").textContent = state.busy ? "Identifying…" : "Identify";
+}
+
+/* ---------- choosing a photo ---------- */
+
+function setFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+  state.file = file;
+  state.previewUrl = URL.createObjectURL(file);
+  $("#preview").src = state.previewUrl;
+  $("#shot").hidden = false;
+  $("#prompt").hidden = true;
+  $("#results").replaceChildren(el("p", { class: "empty", text: "Photo ready. Choose Identify." }));
+  updateGo();
+}
+
+const frame = $("#frame");
+$("#choose").addEventListener("click", () => $("#file").click());
+$("#camera").addEventListener("click", () => $("#cam").click());
+frame.addEventListener("click", () => $("#file").click());
+frame.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#file").click(); } });
+for (const input of [$("#file"), $("#cam")]) {
+  input.addEventListener("change", () => { setFile(input.files[0]); input.value = ""; });
+}
+frame.addEventListener("dragover", (e) => { e.preventDefault(); frame.classList.add("dragging"); });
+frame.addEventListener("dragleave", () => frame.classList.remove("dragging"));
+frame.addEventListener("drop", (e) => {
+  e.preventDefault();
+  frame.classList.remove("dragging");
+  setFile(e.dataTransfer.files[0]);
+});
+window.addEventListener("paste", (e) => {
+  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+  if (item) setFile(item.getAsFile());
+});
+
+/* Phone photos are large. Shrink before upload; fall back to the original on any problem. */
+async function prepareUpload(file) {
+  try {
+    if (file.size < 1.5 * 1024 * 1024) return file;
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+    return blob || file;
+  } catch (_) {
+    return file;
+  }
+}
+
+/* ---------- models on this device ---------- */
+
+const mb = (bytes) => Math.round(bytes / 1e6).toLocaleString("en");
+
+/* Tries a network error or a 5xx twice more: Cloudflare now and then answers a model part with a
+   500 that works a moment later. */
+async function fetchOk(url, tries = 3) {
+  const res = await fetch(url).catch((err) => (tries > 1 ? null : Promise.reject(err)));
+  if (res?.ok) return res;
+  if (tries > 1 && !(res?.status < 500)) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return fetchOk(url, tries - 1);
+  }
+  throw new Error(`${url}: the server answered ${res.status}`);
+}
+
+/* Streams a response into `bytes` from offset `got`, reporting progress; returns the new offset. */
+async function readInto(res, bytes, got, progress) {
+  const reader = res.body.getReader();
+  for (let shown = 0; ;) {
+    const { done, value } = await reader.read();
+    if (done) return got;
+    bytes.set(value, got);
+    got += value.length;
+    if (performance.now() - shown > 100) { progress(got, bytes.length); shown = performance.now(); }
+  }
+}
+
+async function openCache() {
+  try { return await caches.open(dev.cache); } catch (_) { return null; }  // none in some private windows
+}
+
+/* A model file: from this browser's cache, or downloaded and kept there. Files over 24 MiB come in
+   parts (Cloudflare serves up to 25 MiB) and are kept part by part: Chrome keeps no single entry of
+   610 MB, and an interrupted download resumes from the last whole part. A private window or a full
+   disk can refuse to keep them; the model still runs. A file in parts stops at its next part once
+   `stale()` says another model was chosen, and the parts kept so far stay for next time. */
+async function getBytes(url, progress = () => {}, stale = () => false) {
+  const cache = await openCache();
+  let bytes, fresh = 0, kept = Boolean(cache);
+  const keep = (key, data) => cache?.put(key, new Response(data, { headers: { "content-length": String(data.length) } }))
+    .catch((err) => { kept = false; console.warn(`This browser did not keep ${key}.`, err); });
+  if (dev.split[url]) {
+    bytes = new Uint8Array(dev.split[url]);
+    for (let i = 0, got = 0; got < bytes.length; i++) {
+      if (stale()) throw SUPERSEDED;
+      const key = `${url}.${i}`, hit = await cache?.match(key), start = got;
+      got = await readInto(hit || (await fetchOk(key)), bytes, got, progress);
+      if (!hit) { fresh++; await keep(key, bytes.subarray(start, got)); }
+    }
+  } else {
+    const hit = await cache?.match(url), res = hit || (await fetchOk(url));
+    // A compressed body's length is not the file's.
+    const total = res.headers.get("content-encoding") ? 0 : Number(res.headers.get("content-length"));
+    bytes = total ? new Uint8Array(total) : new Uint8Array(await res.arrayBuffer());
+    if (total) await readInto(res, bytes, 0, progress);
+    if (!hit) { fresh++; await keep(url, bytes); }
+  }
+  return { bytes, cached: !fresh, kept };
+}
+
+/* ONNX Runtime Web, each build once per page: "webgpu" runs the models on the GPU, "wasm" is the smaller
+   CPU-only build. The CPU always gets its own build: a WebGPU start that fails leaves the WebGPU
+   build's module unusable (it throws a bare number, then hangs or crashes the page). */
+const runtimes = {};
+function runtime(ep) {
+  runtimes[ep] ??= (async () => {
+    const [ort, wasm] = await Promise.all([
+      import(`./models/ort/ort.${ep}.min.mjs`),
+      getBytes(`models/ort/ort-wasm-simd-threaded${ep === "webgpu" ? ".asyncify" : ""}.wasm`),
+    ]);
+    ort.env.wasm.wasmPaths = new URL("models/ort/", location.href).href;
+    ort.env.wasm.wasmBinary = wasm.bytes;  // fetched here, so it too can come in parts and stay cached
+    return ort;
+  })().catch((err) => { delete runtimes[ep]; throw err; });
+  return runtimes[ep];
+}
+const hasGpu = () => (dev.gpu ??= Promise.resolve(navigator.gpu?.requestAdapter()).then(Boolean, () => false));
+
+/* The on-device model this tab is starting, kept across a reload: a phone that runs out of memory
+   for a model kills the page and reloads it, and the next load should say why rather than start
+   the model again. With storage off (cookies blocked) the page just can't tell. */
+function remember(id) {
+  try { id ? sessionStorage.setItem("leaf-starting", id) : sessionStorage.removeItem("leaf-starting"); }
+  catch (err) { console.warn(err); }
+}
+function remembered() {
+  try { return sessionStorage.getItem("leaf-starting"); } catch (_) { return null; }
+}
+
+/* Another model was chosen before this one finished loading: not an error to show. */
+const SUPERSEDED = new Error("Another model was chosen before this one finished loading.");
+
+/* Downloads (or takes from the cache) and starts an on-device model: on the GPU if the browser offers
+   one, and on the CPU if that fails, so nobody has to choose. The latest choice wins: a model chosen
+   before it stops downloading at its next part, and only one model is held in memory. The one loaded
+   before stays usable until the new one starts. */
+function loadDevice(m) {
+  dev.want = m;
+  if (m.session) showLoad("idle", m.status);
+  m.loading ??= (async () => {
+    const stale = () => dev.want !== m;
+    const show = (got, total) => stale() || showLoad("progress", `Downloading ${m.label}: ${mb(got)} of ${mb(total)} MB`, got / total);
+    const [eps, labels, table, graph, data] = await Promise.all([
+      hasGpu().then((gpu) => (gpu ? ["webgpu", "wasm"] : ["wasm"])),
+      (dev.labels ??= fetchOk("models/labels.json").then((r) => r.json())),
+      getBytes(`models/${m.table}`),
+      getBytes(`models/${m.file}`, m.data ? undefined : show, stale),
+      m.data && getBytes(`models/${m.data}`, show, stale),  // the weights, as ONNX external data
+      hasGpu().then((gpu) => runtime(gpu ? "webgpu" : "wasm")),  // downloaded alongside the model
+    ]);
+    // One start at a time, and no other model in memory while it runs: starting is when memory peaks.
+    const before = dev.starting;
+    let done;
+    dev.starting = new Promise((resolve) => (done = resolve));
+    await before;
+    let gpuFailed = false;
+    try {
+      if (stale()) throw SUPERSEDED;
+      for (const other of dev.list) {
+        if (other === m || !other.session) continue;
+        await other.session.release();
+        Object.assign(other, { session: null, loading: null, run: null });
+      }
+      updateCompare();
+      showLoad("progress", `Starting ${m.label}…`, 1);
+      remember(m.id);  // left behind if this start kills the page
+      for (const ep of eps) {
+        let session;
+        try {
+          const ort = await runtime(ep);
+          session = await ort.InferenceSession.create(graph.bytes, {
+            executionProviders: [ep], ...(data && { externalData: [{ path: m.data, data: data.bytes }] }),
+          });
+          const [input] = session.inputNames, [output] = session.outputNames;
+          m.run = async (x) => (await session.run({ [input]: new ort.Tensor("float32", x, [1, 3, 224, 224]) }))[output].data;
+          await m.run(new Float32Array(3 * 224 * 224));  // prepares the kernels, and proves this path works
+          Object.assign(m, { session, ep, names: labels.names, common: labels.common, vectors: halfToFloat(table.bytes) });
+          break;
+        } catch (err) {
+          if (ep === "wasm") throw err;
+          console.warn(`${m.label} did not run on the GPU; trying the CPU.`, err);
+          gpuFailed = true;
+          dev.gpu = Promise.resolve(false);  // nor the next model: the WebGPU build may be stuck now
+          session?.release().catch((e) => console.warn(e));  // not awaited, in case it is
+        }
+      }
+      if (stale()) {  // another model was chosen while this one started
+        await m.session.release();
+        Object.assign(m, { session: null, run: null });
+        throw SUPERSEDED;
+      }
+    } finally {
+      remember(null);
+      done();
+    }
+    m.status = `${m.label} is ready on this device's ${m.ep === "webgpu" ? "GPU" : "CPU"}` +
+      (gpuFailed ? ": the GPU did not run it." : ".") +
+      (dev.why?.id === m.id ? ` Chosen because ${dev.why.text}.` : "") +
+      (graph.kept && (!data || data.kept) ? "" : " This browser did not keep a copy, so it downloads again next time.");
+    showLoad("done", m.status);
+    updateCompare();
+    return m;
+  })().catch((err) => {
+    m.loading = null;
+    if (err !== SUPERSEDED) showLoad("error", `${m.label} did not load. ${err.message ?? err}`);
+    throw err;
+  });
+  return m.loading;
+}
+
+/* Label tables are fp16 on disk to halve the download. */
+function halfToFloat(bytes) {
+  const h = new Uint16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+  const f = new Float32Array(h.length);
+  for (let i = 0; i < h.length; i++) {
+    const e = (h[i] >> 10) & 31, m = h[i] & 1023, sign = h[i] >> 15 ? -1 : 1;
+    f[i] = sign * (e === 0 ? m * 2 ** -24 : e === 31 ? (m ? NaN : Infinity) : (1 + m / 1024) * 2 ** (e - 15));
+  }
+  return f;
+}
+
+/* Centre square of the photo (a smaller one for the Mobile model, as in its training), 224 x 224,
+   RGB in 0..1, channels first. The models normalise the colours themselves. */
+async function pixels(file, crop) {
+  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const side = Math.min(bmp.width, bmp.height) * crop;
+  const canvas = new OffscreenCanvas(224, 224);
+  const g = canvas.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingQuality = "high";
+  g.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 224, 224);
+  bmp.close();
+  const rgba = g.getImageData(0, 0, 224, 224).data, n = 224 * 224, x = new Float32Array(3 * n);
+  for (let i = 0; i < n; i++) {
+    x[i] = rgba[4 * i] / 255;
+    x[n + i] = rgba[4 * i + 1] / 255;
+    x[2 * n + i] = rgba[4 * i + 2] / 255;
+  }
+  return x;
+}
+
+/* Cosine similarity with every species name, softmax at the model's own temperature, top k,
+   in the shape the server answers with. */
+function rank(m, embedding, k) {
+  const n = m.names.length, dim = m.dim, logits = new Float32Array(n);
+  let max = -Infinity, sum = 0;
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (let j = 0, o = i * dim; j < dim; j++) s += m.vectors[o + j] * embedding[j];
+    logits[i] = s * m.scale;
+    if (logits[i] > max) max = logits[i];
+  }
+  for (let i = 0; i < n; i++) sum += (logits[i] = Math.exp(logits[i] - max));
+  return [...logits.keys()].sort((a, b) => logits[b] - logits[a]).slice(0, k)
+    .map((i) => ({ name: m.names[i], common_name: m.common[i], score: logits[i] / sum }));
+}
+
+/* ---------- identify ---------- */
+
+async function identify() {
+  if (!state.file || state.busy) return;
+  const ids = $("#compare").checked ? readyIds() : [selectedId()].filter(Boolean);
+  if (ids.length === 0) return;
+
+  state.busy = true;
+  updateGo();
+  frame.classList.add("scanning");
+  const results = $("#results");
+  results.replaceChildren();
+  const upload = ids.some((id) => !devModel(id)) && (await prepareUpload(state.file));  // on-device models read the photo itself
+  const topK = Number($("#topk").value);
+  const named = state.backends.length + dev.list.length > 1;  // say which model answered only when there is a choice
+
+  for (const id of ids) {
+    const m = devModel(id), info = state.backends.find((b) => b.id === id);
+    const label = m ? `${m.label}, on this device` : info ? info.label : id;
+    const pending = el("section", { class: "run" });
+    if (named) pending.append(el("h2", { text: label }));
+    if (named && (m ? !m.session : info && !info.loaded)) {
+      pending.append(el("p", { class: "meta", text: "Loading this model first. It can take a minute." }));
+    }
+    results.append(pending);
+
+    try {
+      let data;
+      if (m) {
+        if (!m.session) await loadDevice(m);  // one already loaded runs as it is, without taking over the menu's choice
+        data = { label, predictions: rank(m, await m.run(await pixels(state.file, m.crop)), topK) };
+      } else {
+        const form = new FormData();
+        form.append("file", upload, "photo.jpg");
+        form.append("backend", id);
+        form.append("top_k", topK);
+        data = await api("api/identify", { method: "POST", body: form });
+        if (info) info.loaded = true;
+      }
+      pending.replaceWith(renderRun(data, named));
+    } catch (err) {
+      pending.replaceWith(renderError(named ? label : "", err.message));
+    }
+  }
+  frame.classList.remove("scanning");
+  state.busy = false;
+  updateGo();
+}
+
+function percent(score) {
+  const p = score * 100;
+  return p < 0.1 ? "under 0.1%" : `${p.toFixed(p < 10 ? 1 : 0)}%`;
+}
+
+function renderRun(data, named) {
+  const list = el("ol", { class: "matches" });
+  data.predictions.forEach((p, i) => {
+    const bar = el("span");
+    const link = el("a", {
+      href: "https://en.wikipedia.org/wiki/Special:Search?search=" + encodeURIComponent(p.name),
+      target: "_blank", rel: "noopener noreferrer", text: "Look up",
+    });
+    const names = el("div", {}, el("span", { class: "sci", text: p.name }));
+    if (p.common_name) names.append(el("span", { class: "common", text: p.common_name }));
+    list.append(
+      el("li", { class: "match" + (i === 0 ? " first" : "") },
+        el("div", { class: "row" }, names, el("span", { class: "pct", text: percent(p.score) })),
+        el("div", { class: "bar" }, bar), link)
+    );
+    requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = `${Math.max(1, Math.round(p.score * 1000) / 10)}%`; }));
+  });
+  const run = el("section", { class: "run" }, list);
+  if (named) run.prepend(el("h2", { text: data.label }));
+  return run;
+}
+
+function renderError(label, message) {
+  const run = el("section", { class: "run" }, el("div", { class: "error", role: "alert" }, el("p", { text: message })));
+  if (label) run.prepend(el("h2", { text: label }));
+  return run;
+}
+
+$("#model").addEventListener("change", () => {
+  dev.why = null;  // chosen by hand now
+  describe();
+  updateGo();
+  const m = devModel(selectedId());
+  if (m) loadDevice(m).catch((err) => err === SUPERSEDED || console.warn(err));  // the status line says what failed
+  else {
+    dev.want = null;  // a server model: an on-device download stops at its next part
+    showLoad("idle");
+  }
+});
+$("#go").addEventListener("click", identify);
+loadMeta();
+</script>
+</body>
+</html>
