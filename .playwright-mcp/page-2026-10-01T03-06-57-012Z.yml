@@ -1,0 +1,111 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic "Primary navigation" [ref=e4]:
+      - link "L.E.A.F. home" [ref=e5] [cursor=pointer]:
+        - /url: "#overview"
+        - text: L.E.A.F.
+      - navigation [ref=e6]:
+        - link "Example results" [ref=e7] [cursor=pointer]:
+          - /url: "#examples"
+        - link "How it runs" [ref=e8] [cursor=pointer]:
+          - /url: "#models"
+        - link "Try it" [ref=e9] [cursor=pointer]:
+          - /url: "#workbench"
+    - region [ref=e10]:
+      - generic [ref=e11]:
+        - paragraph [ref=e12]: Plant identification, on your terms
+        - heading "Point a photo at a plant. Start with a better lead." [level=1] [ref=e13]
+        - paragraph [ref=e14]: L.E.A.F. is a small, self-hosted plant identification service. Choose a photo and compare the plants a model thinks it sees, either through your own server or directly in a browser.
+        - link "Identify a plant" [ref=e15] [cursor=pointer]:
+          - /url: "#workbench"
+      - complementary "Example Californian poppy result" [ref=e16]:
+        - text: FIELD RESULT / 001
+        - generic [ref=e17]: Eschscholzia californica
+        - generic [ref=e18]: Californian poppy
+        - generic [ref=e19]:
+          - generic [ref=e20]: Top result
+          - generic [ref=e21]: 99.98%
+        - paragraph [ref=e24]: Example output from the documented API sample. Scores rank known labels; they are not calibrated odds.
+  - region [ref=e25]:
+    - heading "A clear path from a photo to the next thing to check." [level=2] [ref=e26]
+    - generic [ref=e27]:
+      - article [ref=e28]:
+        - generic [ref=e29]: 01 / FRAME
+        - heading "Choose a photo" [level=3] [ref=e30]
+        - paragraph [ref=e31]: Drop, paste, or select a picture with the plant plainly visible.
+      - article [ref=e32]:
+        - generic [ref=e33]: 02 / IDENTIFY
+        - heading "Run a model" [level=3] [ref=e34]
+        - paragraph [ref=e35]: L.E.A.F. can preload a server model or use an on-device model when a browser build is available.
+      - article [ref=e36]:
+        - generic [ref=e37]: 03 / CHECK
+        - heading "Read the matches" [level=3] [ref=e38]
+        - paragraph [ref=e39]: Compare ranked scientific and common names, then confirm the lead with a field guide or local expert.
+  - region [ref=e40]:
+    - generic [ref=e41]:
+      - heading "See the result in the shape you will use." [level=2] [ref=e42]
+      - paragraph [ref=e43]: Every run returns a ranked list, rather than a claim of certainty. The top result gets the visual emphasis; the rest remain available for a closer look.
+      - link "Try your own photo" [ref=e44] [cursor=pointer]:
+        - /url: "#workbench"
+    - article "Static example prediction list" [ref=e45]:
+      - paragraph [ref=e46]: Representative result layout
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - strong [ref=e49]: Eschscholzia californica
+          - text: Californian poppy
+        - generic [ref=e50]: 99.98%
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - strong [ref=e53]: Model and image details
+          - text: Returned alongside ranked predictions when using the API.
+        - generic [ref=e54]: JSON
+      - paragraph [ref=e55]: The first row uses the README's documented API example. The second row describes the response format, not a second plant prediction.
+  - region [ref=e56]:
+    - generic [ref=e57]:
+      - heading "Run it where the photo makes sense." [level=2] [ref=e59]
+      - generic [ref=e60]:
+        - heading "One interface, two useful paths." [level=3] [ref=e61]
+        - paragraph [ref=e62]: Use a self-hosted model when you want a service you control. When browser-ready models are present, L.E.A.F. can run them on the device that took the photo, keeping that image in the browser.
+        - list [ref=e63]:
+          - listitem [ref=e64]:
+            - generic [ref=e65]: Self-hosted
+            - generic [ref=e66]: FastAPI serves the page and swappable plant-identification models from the same container.
+          - listitem [ref=e67]:
+            - generic [ref=e68]: On-device
+            - generic [ref=e69]: Browser models use WebGPU when available, with a WebAssembly fallback and local browser caching.
+          - listitem [ref=e70]:
+            - generic [ref=e71]: Compare
+            - generic [ref=e72]: When several ready models are available, run them side by side and see where they differ.
+  - region [ref=e73]:
+    - generic [ref=e74]:
+      - heading "The workbench" [level=2] [ref=e75]
+      - paragraph [ref=e76]: This is the live tool. Add a plant photo, choose the available model, and inspect its ranked matches.
+    - generic [ref=e77]:
+      - heading "L.E.A.F." [level=1] [ref=e78]
+      - paragraph [ref=e79]: Lightweight Engine for Assessing Flora. Identify a plant from a photo.
+      - paragraph [ref=e81]: "Cannot reach the server: Server returned 404"
+    - main [ref=e82]:
+      - region "Photo and model" [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]: Model
+          - combobox "Model" [ref=e86]
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - checkbox "Run every ready model and compare" [ref=e89]
+            - text: Run every ready model and compare
+          - generic [ref=e90]:
+            - text: Results shown
+            - combobox "Results shown" [ref=e91]:
+              - option "3"
+              - option "5" [selected]
+              - option "10"
+        - button "Choose a photo" [ref=e92] [cursor=pointer]:
+          - paragraph [ref=e93]: Drop a photo here, paste one, or choose a file.
+        - generic [ref=e94]:
+          - button "Choose photo" [ref=e95] [cursor=pointer]
+          - button "Identify" [disabled] [ref=e96]
+      - region "Results" [ref=e97]:
+        - paragraph [ref=e99]: Add a photo, then choose Identify. The closest matches appear here.
+        - paragraph [ref=e100]: Scores show how a model splits its confidence among the plants it knows. They are not the chance that the answer is right.
+  - contentinfo [ref=e101]:
+    - paragraph [ref=e102]: A photo match is a lead, not a verdict. Confirm with a field guide or a local expert, and never eat or handle a plant based on this result alone.
