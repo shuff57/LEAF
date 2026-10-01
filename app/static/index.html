@@ -38,8 +38,59 @@
     color: var(--ink);
     font: 16px/1.5 var(--sans);
   }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: clamp(16px, 4vw, 40px); }
-  .masthead { margin-bottom: 18px; }
+ .wrap { max-width: 1080px; margin: 0 auto; padding: clamp(16px, 4vw, 40px); }
+ .masthead { margin-bottom: 18px; }
+ .site-nav { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 8px 0 24px; font-size: 0.9rem; }
+ .site-nav .mark { color: var(--ink); font: 600 1.05rem/1 var(--serif); letter-spacing: 0.08em; text-decoration: none; }
+ .site-nav nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 14px; }
+ .site-nav a { color: var(--ink-soft); text-decoration: none; }
+ .site-nav a:hover, .site-nav a:focus-visible { color: var(--moss); text-decoration: underline; text-underline-offset: 3px; }
+ .site-nav a:focus-visible, .hero-link:focus-visible, .example-link:focus-visible { outline: 2px solid var(--moss); outline-offset: 3px; }
+ .hero { display: grid; grid-template-columns: minmax(0, 7fr) minmax(260px, 5fr); gap: clamp(28px, 7vw, 88px); align-items: end; min-height: min(560px, calc(100dvh - 88px)); padding: clamp(28px, 7vw, 92px) 0 clamp(44px, 7vw, 88px); border-bottom: 1px solid var(--line); }
+ .eyebrow { margin: 0 0 13px; color: var(--moss); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+ .hero h1 { max-width: 10ch; font-size: clamp(3.2rem, 8vw, 6.8rem); line-height: 0.93; }
+ .hero-copy { max-width: 44ch; margin: 22px 0 0; color: var(--ink-soft); font-size: clamp(1.05rem, 1.7vw, 1.25rem); }
+ .hero-link { display: inline-flex; margin-top: 26px; padding: 0.7rem 1.05rem; border: 1px solid var(--moss); border-radius: 6px; background: var(--moss); color: var(--on-moss); font-weight: 600; text-decoration: none; }
+ .hero-link:hover { filter: brightness(0.94); }
+ .hero-link:active { transform: translateY(1px); }
+ .hero-specimen { padding: clamp(22px, 4vw, 38px); border: 1px solid var(--line); background: var(--paper); }
+ .hero-specimen::before { content: "FIELD RESULT / 001"; display: block; margin-bottom: 34px; color: var(--ink-soft); font-size: 0.72rem; letter-spacing: 0.1em; }
+ .specimen-name { display: block; font: italic clamp(1.7rem, 3vw, 2.4rem)/1.05 var(--serif); }
+ .specimen-common { display: block; margin-top: 7px; color: var(--ink-soft); }
+ .specimen-score { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 36px; font-size: 0.85rem; }
+ .specimen-score b { color: var(--moss); font-size: 1.3rem; }
+ .specimen-bar { height: 7px; margin-top: 8px; background: var(--line); }
+ .specimen-bar span { display: block; width: 99.98%; height: 100%; background: var(--moss); }
+ .specimen-note { margin: 18px 0 0; color: var(--ink-soft); font-size: 0.78rem; }
+ .landing-section { padding: clamp(56px, 10vw, 112px) 0; border-bottom: 1px solid var(--line); }
+ .section-heading { max-width: 32ch; margin: 0 0 clamp(28px, 5vw, 54px); font: 600 clamp(2rem, 4.6vw, 3.8rem)/1.05 var(--serif); letter-spacing: -0.02em; }
+ .steps { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+ .step { padding: 22px 24px 8px 0; border-right: 1px solid var(--line); }
+ .step + .step { padding-left: 24px; }
+ .step:last-child { border-right: 0; }
+ .step-number { display: block; margin-bottom: 40px; color: var(--moss); font-size: 0.8rem; font-weight: 700; }
+ .step h3 { margin: 0; font: 600 1.45rem/1.1 var(--serif); }
+ .step p { max-width: 29ch; margin: 12px 0 0; color: var(--ink-soft); }
+ .examples { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 7vw, 88px); align-items: start; }
+ .examples .section-heading { margin-bottom: 16px; }
+ .examples-copy { max-width: 40ch; margin: 0; color: var(--ink-soft); }
+ .example-sheet { padding: clamp(22px, 4vw, 38px); border: 1px solid var(--line); background: var(--paper); }
+ .example-label { margin: 0 0 28px; color: var(--ink-soft); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+ .example-prediction { display: grid; grid-template-columns: 1fr auto; gap: 18px; padding: 15px 0; border-top: 1px solid var(--line); }
+ .example-prediction:first-of-type { border-top: 0; padding-top: 0; }
+ .example-prediction strong { display: block; font: italic 1.25rem/1.2 var(--serif); }
+ .example-prediction span { color: var(--ink-soft); font-size: 0.9rem; }
+ .example-prediction b { color: var(--moss); font-variant-numeric: tabular-nums; }
+ .example-link { display: inline-block; margin-top: 28px; color: var(--ink); font-weight: 600; text-decoration-color: var(--moss); text-underline-offset: 4px; }
+ .mode-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: clamp(28px, 7vw, 88px); }
+ .mode-grid h3 { margin: 0; font: 600 clamp(1.6rem, 3vw, 2.4rem)/1.08 var(--serif); }
+ .mode-grid p { max-width: 48ch; color: var(--ink-soft); }
+ .mode-list { list-style: none; margin: 28px 0 0; padding: 0; border-top: 1px solid var(--line); }
+ .mode-list li { display: grid; grid-template-columns: 10ch 1fr; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+ .mode-list b { color: var(--moss); }
+ .workbench-heading { display: flex; justify-content: space-between; gap: 20px; align-items: end; margin: 0 0 30px; }
+ .workbench-heading h2 { margin: 0; font: 600 clamp(2.1rem, 5vw, 4rem)/1 var(--serif); }
+ .workbench-heading p { max-width: 40ch; margin: 0; color: var(--ink-soft); }
   h1 {
     margin: 0;
     font: 600 clamp(1.9rem, 4vw, 2.6rem)/1.1 var(--serif);
@@ -183,24 +234,103 @@
   footer p { margin: 0 0 8px; }
   footer a { color: inherit; }
 
-  @media (prefers-reduced-motion: reduce) {
+ @media (prefers-reduced-motion: reduce) {
     .bar span { transition: none; }
     .scanning .shot::after { opacity: 0; animation: none; }
-  }
+ }
+ @media (max-width: 720px) {
+ .site-nav { align-items: flex-start; }
+ .site-nav nav { justify-content: flex-start; }
+ .hero, .examples, .mode-grid { grid-template-columns: 1fr; }
+ .hero { min-height: auto; padding-top: 36px; }
+ .hero h1 { max-width: 11ch; }
+ .steps { grid-template-columns: 1fr; }
+ .step, .step + .step { padding: 22px 0; border-right: 0; border-bottom: 1px solid var(--line); }
+ .step:last-child { border-bottom: 0; }
+ .step-number { margin-bottom: 16px; }
+ .mode-list li { grid-template-columns: 1fr; gap: 2px; }
+ .workbench-heading { display: block; }
+ .workbench-heading p { margin-top: 14px; }
+ }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="masthead">
-    <h1>L.E.A.F.</h1>
-    <p class="lede">Lightweight Engine for Assessing Flora. Identify a plant from a photo.</p>
-    <div class="load" id="load" aria-hidden="true"><span></span></div>
-    <p class="status" id="status" aria-live="polite"></p>
-  </header>
+ <header id="overview">
+ <div class="site-nav" aria-label="Primary navigation">
+ <a class="mark" href="#overview" aria-label="L.E.A.F. home">L.E.A.F.</a>
+ <nav><a href="#examples">Example results</a><a href="#models">How it runs</a><a href="#workbench">Try it</a></nav>
+ </div>
+ <section class="hero" aria-labelledby="hero-title">
+ <div>
+ <p class="eyebrow">Plant identification, on your terms</p>
+ <h1 id="hero-title">Point a photo at a plant. Start with a better lead.</h1>
+ <p class="hero-copy">L.E.A.F. is a small, self-hosted plant identification service. Choose a photo and compare the plants a model thinks it sees, either through your own server or directly in a browser.</p>
+ <a class="hero-link" href="#workbench">Identify a plant</a>
+ </div>
+ <aside class="hero-specimen" aria-label="Example Californian poppy result">
+ <span class="specimen-name">Eschscholzia californica</span>
+ <span class="specimen-common">Californian poppy</span>
+ <div class="specimen-score"><span>Top result</span><b>99.98%</b></div>
+ <div class="specimen-bar" aria-hidden="true"><span></span></div>
+ <p class="specimen-note">Example output from the documented API sample. Scores rank known labels; they are not calibrated odds.</p>
+ </aside>
+ </section>
+ </header>
 
-  <main class="bench">
+ <section class="landing-section" aria-labelledby="how-title">
+ <h2 class="section-heading" id="how-title">A clear path from a photo to the next thing to check.</h2>
+ <div class="steps">
+ <article class="step"><span class="step-number">01 / FRAME</span><h3>Choose a photo</h3><p>Drop, paste, or select a picture with the plant plainly visible.</p></article>
+ <article class="step"><span class="step-number">02 / IDENTIFY</span><h3>Run a model</h3><p>L.E.A.F. can preload a server model or use an on-device model when a browser build is available.</p></article>
+ <article class="step"><span class="step-number">03 / CHECK</span><h3>Read the matches</h3><p>Compare ranked scientific and common names, then confirm the lead with a field guide or local expert.</p></article>
+ </div>
+ </section>
+
+ <section class="landing-section examples" id="examples" aria-labelledby="examples-title">
+ <div>
+ <h2 class="section-heading" id="examples-title">See the result in the shape you will use.</h2>
+ <p class="examples-copy">Every run returns a ranked list, rather than a claim of certainty. The top result gets the visual emphasis; the rest remain available for a closer look.</p>
+ <a class="example-link" href="#workbench">Try your own photo</a>
+ </div>
+ <article class="example-sheet" aria-label="Static example prediction list">
+ <p class="example-label">Representative result layout</p>
+ <div class="example-prediction"><div><strong>Eschscholzia californica</strong><span>Californian poppy</span></div><b>99.98%</b></div>
+ <div class="example-prediction"><div><strong>Model and image details</strong><span>Returned alongside ranked predictions when using the API.</span></div><b>JSON</b></div>
+ <p class="specimen-note">The first row uses the README's documented API example. The second row describes the response format, not a second plant prediction.</p>
+ </article>
+ </section>
+
+ <section class="landing-section" id="models" aria-labelledby="models-title">
+ <div class="mode-grid">
+ <div><h2 class="section-heading" id="models-title">Run it where the photo makes sense.</h2></div>
+ <div>
+ <h3>One interface, two useful paths.</h3>
+ <p>Use a self-hosted model when you want a service you control. When browser-ready models are present, L.E.A.F. can run them on the device that took the photo, keeping that image in the browser.</p>
+ <ul class="mode-list">
+ <li><b>Self-hosted</b><span>FastAPI serves the page and swappable plant-identification models from the same container.</span></li>
+ <li><b>On-device</b><span>Browser models use WebGPU when available, with a WebAssembly fallback and local browser caching.</span></li>
+ <li><b>Compare</b><span>When several ready models are available, run them side by side and see where they differ.</span></li>
+ </ul>
+ </div>
+ </div>
+ </section>
+
+ <section class="landing-section" aria-labelledby="workbench-title">
+ <div class="workbench-heading">
+ <h2 id="workbench-title">The workbench</h2>
+ <p>This is the live tool. Add a plant photo, choose the available model, and inspect its ranked matches.</p>
+ </div>
+ <header class="masthead">
+ <h1>L.E.A.F.</h1>
+ <p class="lede">Lightweight Engine for Assessing Flora. Identify a plant from a photo.</p>
+ <div class="load" id="load" aria-hidden="true"><span></span></div>
+ <p class="status" id="status" aria-live="polite"></p>
+ </header>
+
+ <main class="bench" id="workbench">
     <section aria-label="Photo and model">
-      <div class="models" id="models">
+ <div class="models" id="model-picker">
         <label for="model">Model</label>
         <select id="model" aria-describedby="model-desc"></select>
         <p class="desc" id="model-desc"></p>
@@ -233,10 +363,11 @@
         <p class="empty">Add a photo, then choose Identify. The closest matches appear here.</p>
       </div>
       <p class="note">Scores show how a model splits its confidence among the plants it knows. They are not the chance that the answer is right.</p>
-    </section>
-  </main>
+ </section>
+ </main>
+ </section>
 
-  <footer>
+ <footer>
     <p>A photo match is a lead, not a verdict. Confirm with a field guide or a local expert, and never eat or handle a plant based on this result alone.</p>
     <p id="credits" hidden>On-device models: <a href="https://huggingface.co/imageomics/bioclip-2">BioCLIP 2</a> and <a href="https://huggingface.co/imageomics/bioclip-2.5-vith14">BioCLIP 2.5</a> by Imageomics, and <a href="https://huggingface.co/crazedcodernate/bioclip-2.5-mobile-fastvit">BioCLIP 2.5 Mobile</a> by Nate Hamilton, all MIT licensed. Common names from iNaturalist.</p>
 </div>
@@ -353,7 +484,7 @@ function renderModels(selected) {
   for (const m of dev.list) device.append(el("option", { value: DEV + m.id, text: `${m.label} · ${both ? "this device, " : ""}${mb(m.bytes)} MB` }));
   select.value = selected ?? "";
   // A single model that is ready leaves nothing to choose, so the menu goes.
-  $("#models").hidden = select.options.length === 1 && !select.options[0].disabled;
+ $("#model-picker").hidden = select.options.length === 1 && !select.options[0].disabled;
   describe();
   updateCompare();
 }

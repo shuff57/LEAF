@@ -121,6 +121,8 @@ def test_serves_ui(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "Identify a plant" in r.text
+    for anchor in ('id="overview"', 'id="examples"', 'id="models"', 'id="workbench"'):
+        assert anchor in r.text
     # Cross-origin isolation, which the on-device models need to run on more than one CPU thread
     assert r.headers["cross-origin-opener-policy"] == "same-origin"
     assert r.headers["cross-origin-embedder-policy"] == "require-corp"
